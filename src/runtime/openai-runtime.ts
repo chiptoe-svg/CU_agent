@@ -13,7 +13,7 @@ import fs from 'fs';
 import path from 'path';
 import OpenAI from 'openai';
 
-import { GROUPS_DIR } from '../config.js';
+import { DEFAULT_MODEL, GROUPS_DIR } from '../config.js';
 import { readEnvFile } from '../env.js';
 import { logger } from '../logger.js';
 
@@ -27,7 +27,7 @@ import type {
   ToolExecutor,
 } from './types.js';
 
-const DEFAULT_MODEL = 'gpt-4.1';
+// DEFAULT_MODEL imported from config.ts
 const MAX_TURNS = 50; // safety limit on tool-call loops
 
 export class OpenAIRuntime implements AgentRuntime {
@@ -45,7 +45,7 @@ export class OpenAIRuntime implements AgentRuntime {
     this.groupFolder = config.group.folder;
     this.shouldStop = false;
 
-    const model = process.env.OPENAI_MODEL || DEFAULT_MODEL;
+    const model = config.group.containerConfig?.model || DEFAULT_MODEL;
 
     const envSecrets = readEnvFile(['OPENAI_API_KEY', 'OPENAI_BASE_URL']);
     const client = new OpenAI({
@@ -293,13 +293,10 @@ function buildSkillIndex(): string {
     if (!fs.existsSync(skillMd)) continue;
     const content = fs.readFileSync(skillMd, 'utf-8');
     // Parse frontmatter
-    const match = content.match(
-      /^---\s*\n([\s\S]*?)\n---/,
-    );
+    const match = content.match(/^---\s*\n([\s\S]*?)\n---/);
     if (!match) continue;
     const frontmatter = match[1];
-    const name =
-      frontmatter.match(/^name:\s*(.+)$/m)?.[1]?.trim() || entry;
+    const name = frontmatter.match(/^name:\s*(.+)$/m)?.[1]?.trim() || entry;
     const description =
       frontmatter.match(/^description:\s*(.+)$/m)?.[1]?.trim() || '';
     if (name && description) {

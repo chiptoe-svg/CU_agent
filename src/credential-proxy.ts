@@ -1,14 +1,14 @@
 /**
- * Credential proxy for container isolation.
- * Containers connect here instead of directly to the Anthropic API.
- * The proxy injects real credentials so containers never see them.
+ * Credential proxy for Anthropic API (used by Claude runtime).
+ *
+ * Claude containers route API traffic through this proxy so they never
+ * see real credentials. Other runtimes (OpenAI) handle credentials
+ * directly on the host via readEnvFile().
  *
  * Two auth modes:
  *   API key:  Proxy injects x-api-key on every request.
- *   OAuth:    Container CLI exchanges its placeholder token for a temp
- *             API key via /api/oauth/claude_cli/create_api_key.
- *             Proxy injects real OAuth token on that exchange request;
- *             subsequent requests carry the temp key which is valid as-is.
+ *   OAuth:    Container SDK exchanges placeholder token for a temp API key;
+ *             proxy injects real OAuth token on that exchange request.
  *
  * OAuth token source (in order of priority):
  *   1. CLAUDE_CODE_OAUTH_TOKEN in .env (static, user-managed)

@@ -54,10 +54,30 @@ const RUNTIME_IMAGES: Record<string, string | undefined> = {
 };
 
 export const DEFAULT_RUNTIME = envConfig.DEFAULT_RUNTIME || 'claude';
+export const DEFAULT_MODEL = process.env.OPENAI_MODEL || 'gpt-4.1';
 export const TOOL_BROKER_PORT = parseInt(
   process.env.TOOL_BROKER_PORT || '3002',
   10,
 );
+
+/** Available models grouped by provider. Used by /model command. */
+export const AVAILABLE_MODELS: Record<string, Array<{ id: string; name: string }>> = {
+  openai: [
+    { id: 'gpt-4.1', name: 'GPT-4.1' },
+    { id: 'gpt-4.1-mini', name: 'GPT-4.1 Mini' },
+    { id: 'gpt-4.1-nano', name: 'GPT-4.1 Nano' },
+    { id: 'gpt-4o', name: 'GPT-4o' },
+    { id: 'gpt-4o-mini', name: 'GPT-4o Mini' },
+    { id: 'o3-mini', name: 'o3 Mini' },
+  ],
+  claude: [
+    { id: 'claude-opus-4-6', name: 'Claude Opus 4.6' },
+    { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6' },
+    { id: 'claude-sonnet-4-5-20250514', name: 'Claude Sonnet 4.5' },
+    { id: 'claude-haiku-4-5-20251001', name: 'Claude Haiku 4.5' },
+  ],
+  // local: [] — populated when LiteLLM is configured
+};
 
 /** Resolve the container image for a given runtime. */
 export function getContainerImage(runtime?: string): string {

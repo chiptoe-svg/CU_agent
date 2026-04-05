@@ -32,7 +32,8 @@ export type AgentRuntime = 'claude' | string;
 export interface ContainerConfig {
   additionalMounts?: AdditionalMount[];
   timeout?: number; // Default: 300000 (5 minutes)
-  runtime?: AgentRuntime; // Default: 'claude'. Determines which container image to use.
+  runtime?: AgentRuntime; // Default from .env DEFAULT_RUNTIME
+  model?: string; // Default from .env OPENAI_MODEL. Per-group model override.
 }
 
 export interface RegisteredGroup {

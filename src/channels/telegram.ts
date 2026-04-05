@@ -9,7 +9,15 @@ import {
   hasValidOAuthCredentials,
   switchAuthMode,
 } from '../auth-switch.js';
-import { ASSISTANT_NAME, DATA_DIR, TRIGGER_PATTERN } from '../config.js';
+import {
+  ASSISTANT_NAME,
+  AVAILABLE_MODELS,
+  DATA_DIR,
+  DEFAULT_MODEL,
+  DEFAULT_RUNTIME,
+  TRIGGER_PATTERN,
+} from '../config.js';
+import { getRegisteredGroup, setRegisteredGroup } from '../db.js';
 import { readEnvFile } from '../env.js';
 import { resolveGroupFolderPath } from '../group-folder.js';
 import { logger } from '../logger.js';
@@ -140,9 +148,27 @@ export class TelegramChannel implements Channel {
       ctx.reply(`${ASSISTANT_NAME} is online.`);
     });
 
-    // Command to view or switch auth mode
+    // Command to view or switch auth mode (runtime-aware)
     this.bot.command('auth', async (ctx) => {
+      const chatJid = `tg:${ctx.chat.id}`;
+      const group = getRegisteredGroup(chatJid);
+      const runtime =
+        group?.containerConfig?.runtime || DEFAULT_RUNTIME;
       const args = ctx.message?.text?.split(/\s+/).slice(1) || [];
+
+      if (runtime === 'openai') {
+        // OpenAI runtime: show key status, no switching options
+        const envSecrets = readEnvFile(['OPENAI_API_KEY']);
+        const hasKey = !!envSecrets.OPENAI_API_KEY;
+        const model = process.env.OPENAI_MODEL || 'gpt-4.1';
+        ctx.reply(
+          `Runtime: *OpenAI*\nModel: ${model}\nAPI key: ${hasKey ? 'configured' : 'missing'}`,
+          { parse_mode: 'Markdown' },
+        );
+        return;
+      }
+
+      // Claude runtime: show auth mode with switching options
       const current = getCurrentAuthMode();
 
       if (args.length === 0) {
@@ -172,7 +198,7 @@ export class TelegramChannel implements Channel {
           }
         }
         ctx.reply(
-          `Auth mode: *${label}*\nCredentials: ${credStatus}\n\nSwitch with:\n\`/auth api\` — use API key\n\`/auth oauth\` — use subscription`,
+          `Runtime: *Claude*\nAuth mode: *${label}*\nCredentials: ${credStatus}\n\nSwitch with:\n\`/auth api\` — use API key\n\`/auth oauth\` — use subscription`,
           { parse_mode: 'Markdown' },
         );
         return;
@@ -193,7 +219,6 @@ export class TelegramChannel implements Channel {
         return;
       }
 
-      // Check OAuth credentials before switching
       if (newMode === 'oauth' && !hasValidOAuthCredentials()) {
         ctx.reply(
           'No valid OAuth credentials found.\nRun `claude login` on the server first, then try again.',
@@ -208,7 +233,6 @@ export class TelegramChannel implements Channel {
         parse_mode: 'Markdown',
       });
 
-      // Write flag so the bot sends a ready message after restart
       const flagPath = path.join(DATA_DIR, 'auth-switch-pending.json');
       fs.mkdirSync(DATA_DIR, { recursive: true });
       fs.writeFileSync(
@@ -216,16 +240,68 @@ export class TelegramChannel implements Channel {
         JSON.stringify({ chatId: ctx.chat.id, mode: newMode }),
       );
 
-      // Restart the service so the credential proxy picks up the new mode
       logger.info({ newMode }, 'Auth mode changed, restarting service');
       setTimeout(() => {
-        process.exit(0); // launchd/systemd will restart us
+        process.exit(0);
       }, 1000);
+    });
+
+    // Command to view or switch model
+    this.bot.command('model', async (ctx) => {
+      const chatJid = `tg:${ctx.chat.id}`;
+      const group = getRegisteredGroup(chatJid);
+      if (!group) {
+        ctx.reply('This chat is not registered.');
+        return;
+      }
+
+      const runtime =
+        group.containerConfig?.runtime || DEFAULT_RUNTIME;
+      const currentModel =
+        group.containerConfig?.model || DEFAULT_MODEL;
+      const args = ctx.message?.text?.split(/\s+/).slice(1) || [];
+
+      if (args.length === 0) {
+        // Show current model + available options for this runtime
+        const models = AVAILABLE_MODELS[runtime] || [];
+        let reply = `Model: *${currentModel}*\nRuntime: ${runtime}`;
+        if (models.length > 0) {
+          reply +=
+            '\n\nAvailable:\n' +
+            models
+              .map(
+                (m) =>
+                  `${m.id === currentModel ? '→' : '  '} \`${m.id}\` — ${m.name}`,
+              )
+              .join('\n');
+          reply += '\n\nSwitch with: `/model <name>`';
+        }
+        ctx.reply(reply, { parse_mode: 'Markdown' });
+        return;
+      }
+
+      const target = args[0];
+      if (target === currentModel) {
+        ctx.reply(`Already using ${target}.`);
+        return;
+      }
+
+      // Update the group's container config with the new model
+      const config = group.containerConfig || {};
+      config.model = target;
+      setRegisteredGroup(chatJid, {
+        ...group,
+        containerConfig: config,
+      });
+
+      ctx.reply(`Model switched to *${target}*`, {
+        parse_mode: 'Markdown',
+      });
     });
 
     // Telegram bot commands handled above — skip them in the general handler
     // so they don't also get stored as messages. All other /commands flow through.
-    const TELEGRAM_BOT_COMMANDS = new Set(['chatid', 'ping', 'auth']);
+    const TELEGRAM_BOT_COMMANDS = new Set(['chatid', 'ping', 'auth', 'model']);
 
     this.bot.on('message:text', async (ctx) => {
       if (ctx.message.text.startsWith('/')) {

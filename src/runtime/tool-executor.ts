@@ -193,8 +193,7 @@ const HOST_TOOL_DEFINITIONS: ToolDefinition[] = [
   },
   {
     name: 'list_skills',
-    description:
-      'List all available skills with their names and descriptions.',
+    description: 'List all available skills with their names and descriptions.',
     parameters: { type: 'object', properties: {} },
     execution: 'host',
   },
@@ -577,8 +576,7 @@ export class DefaultToolExecutor implements IToolExecutor {
       const match = content.match(/^---\s*\n([\s\S]*?)\n---/);
       if (!match) continue;
       const frontmatter = match[1];
-      const name =
-        frontmatter.match(/^name:\s*(.+)$/m)?.[1]?.trim() || entry;
+      const name = frontmatter.match(/^name:\s*(.+)$/m)?.[1]?.trim() || entry;
       const description =
         frontmatter.match(/^description:\s*(.+)$/m)?.[1]?.trim() || '';
       if (name) {
