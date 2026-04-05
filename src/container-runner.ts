@@ -313,7 +313,12 @@ export async function runContainerAgent(
   const containerName = `nanoclaw-${safeName}-${Date.now()}`;
   const runtime = getRuntime(group);
   const image = getContainerImage(runtime);
-  const containerArgs = buildContainerArgs(mounts, containerName, image, runtime);
+  const containerArgs = buildContainerArgs(
+    mounts,
+    containerName,
+    image,
+    runtime,
+  );
 
   logger.debug(
     {

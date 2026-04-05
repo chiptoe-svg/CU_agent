@@ -152,8 +152,7 @@ export class TelegramChannel implements Channel {
     this.bot.command('auth', async (ctx) => {
       const chatJid = `tg:${ctx.chat.id}`;
       const group = getRegisteredGroup(chatJid);
-      const runtime =
-        group?.containerConfig?.runtime || DEFAULT_RUNTIME;
+      const runtime = group?.containerConfig?.runtime || DEFAULT_RUNTIME;
       const args = ctx.message?.text?.split(/\s+/).slice(1) || [];
 
       if (runtime === 'openai') {
@@ -255,10 +254,8 @@ export class TelegramChannel implements Channel {
         return;
       }
 
-      const runtime =
-        group.containerConfig?.runtime || DEFAULT_RUNTIME;
-      const currentModel =
-        group.containerConfig?.model || DEFAULT_MODEL;
+      const runtime = group.containerConfig?.runtime || DEFAULT_RUNTIME;
+      const currentModel = group.containerConfig?.model || DEFAULT_MODEL;
       const args = ctx.message?.text?.split(/\s+/).slice(1) || [];
 
       if (args.length === 0) {

@@ -61,7 +61,10 @@ export const TOOL_BROKER_PORT = parseInt(
 );
 
 /** Available models grouped by provider. Used by /model command. */
-export const AVAILABLE_MODELS: Record<string, Array<{ id: string; name: string }>> = {
+export const AVAILABLE_MODELS: Record<
+  string,
+  Array<{ id: string; name: string }>
+> = {
   openai: [
     { id: 'gpt-4.1', name: 'GPT-4.1' },
     { id: 'gpt-4.1-mini', name: 'GPT-4.1 Mini' },
