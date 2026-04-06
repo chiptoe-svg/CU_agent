@@ -369,18 +369,32 @@ async function runAgent(
     new Set(Object.keys(registeredGroups)),
   );
 
-  // Wrap onOutput to track session ID from streamed results
+  const runtime = createRuntime(group);
+
+  // Wrap onOutput to track session ID and detect errors from streamed results
   const wrappedOnOutput = onOutput
     ? async (output: ContainerOutput) => {
         if (output.newSessionId) {
           sessions[group.folder] = output.newSessionId;
           setSession(group.folder, output.newSessionId);
         }
+        // Check for stale sessions in streamed errors (before final event)
+        if (
+          output.status === 'error' &&
+          output.error &&
+          sessionId &&
+          runtime.shouldClearSession?.(output.error)
+        ) {
+          logger.warn(
+            { group: group.name, error: output.error },
+            'Stale session detected in streamed output — clearing',
+          );
+          delete sessions[group.folder];
+          deleteSession(group.folder);
+        }
         await onOutput(output);
       }
     : undefined;
-
-  const runtime = createRuntime(group);
 
   try {
     let lastError: string | undefined;

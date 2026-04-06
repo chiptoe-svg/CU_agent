@@ -74,6 +74,19 @@ function buildVolumeMounts(
   const mounts: VolumeMount[] = [];
   const projectRoot = process.cwd();
   const groupDir = resolveGroupFolderPath(group.folder);
+  const runtime = getRuntime(group);
+
+  // Sync AGENT.md → SDK-specific filename so both SDKs discover it.
+  // AGENT.md is the canonical persona file; CLAUDE.md and AGENTS.md are copies.
+  const agentMd = path.join(groupDir, 'AGENT.md');
+  if (fs.existsSync(agentMd)) {
+    const content = fs.readFileSync(agentMd, 'utf-8');
+    if (runtime === 'claude') {
+      fs.writeFileSync(path.join(groupDir, 'CLAUDE.md'), content);
+    } else if (runtime === 'openai') {
+      fs.writeFileSync(path.join(groupDir, 'AGENTS.md'), content);
+    }
+  }
 
   if (isMain) {
     // Main gets the project root read-only. Writable paths the agent needs
@@ -131,8 +144,6 @@ function buildVolumeMounts(
       });
     }
   }
-
-  const runtime = getRuntime(group);
 
   // Claude runtime: per-group .claude/ sessions directory with SDK settings and skills
   // Other runtimes: create a minimal home directory (no Claude-specific config)
@@ -209,6 +220,18 @@ function buildVolumeMounts(
       const configDst = path.join(groupCodexDir, 'config.toml');
       if (fs.existsSync(configSrc)) {
         fs.copyFileSync(configSrc, configDst);
+      }
+
+      // Sync skills from container/skills/ into Codex skills directory
+      const skillsSrc = path.join(process.cwd(), 'container', 'skills');
+      const skillsDst = path.join(groupCodexDir, 'skills');
+      if (fs.existsSync(skillsSrc)) {
+        for (const skillDir of fs.readdirSync(skillsSrc)) {
+          const srcDir = path.join(skillsSrc, skillDir);
+          if (!fs.statSync(srcDir).isDirectory()) continue;
+          const dstDir = path.join(skillsDst, skillDir);
+          fs.cpSync(srcDir, dstDir, { recursive: true });
+        }
       }
 
       mounts.push({
