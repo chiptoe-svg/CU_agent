@@ -68,7 +68,7 @@ Run `/setup` inside the CLI. It handles everything: dependencies, container runt
 
 - **Multi-runtime agents** — Choose Claude, Codex, or Gemini as your agent SDK. Install via `/add-agentSDK-codex`, `/add-agentSDK-claude`, or `/add-agentSDK-gemini`. Run one or all three.
 - **Per-group model selection** — `/model` switches models instantly. Each group can use a different SDK and model.
-- **Local model support** — Codex SDK routes to OMLX, Ollama, or any OpenAI-compatible endpoint via `baseUrl`. Per-group via `/model`.
+- **Custom model endpoints** — Use local models (OMLX, Ollama) or any third-party provider (Together AI, Groq, HuggingFace, self-hosted vLLM). Set up with `/add-custom-models` and `/add-model-endpoint`. Uses Codex SDK as the bridge to any OpenAI-compatible endpoint.
 - **Multi-channel messaging** — WhatsApp, Telegram, Discord, Slack, Gmail. Add with skills like `/add-telegram`.
 - **Isolated group context** — Each group has its own `AGENT.md` persona, memory, filesystem, and container sandbox.
 - **Scheduled tasks** — Recurring jobs with optional pre-check scripts to minimize API usage.
@@ -174,9 +174,9 @@ Skills we'd like to see:
 - **Gemini** if you want a free tier or prefer Google's ecosystem
 - You can install multiple SDKs and switch per-group
 
-**Can I use local models?**
+**Can I use local or third-party models?**
 
-Yes. The Codex SDK routes to any OpenAI-compatible endpoint. Point `baseUrl` at OMLX (Apple Silicon optimized), Ollama, or LiteLLM. Switch with `/model` in Telegram. Claude SDK is cloud-only.
+Yes. Run `/add-custom-models` to enable, then `/add-model-endpoint` to connect providers — OMLX (Apple Silicon optimized), Ollama, Together AI, Groq, HuggingFace, or any OpenAI-compatible URL. Uses Codex SDK as the bridge (installed automatically if needed). Switch between cloud and custom models with `/model` in Telegram. Works alongside any primary SDK — your main groups stay on Claude or Gemini while specific groups use local models.
 
 **Is this secure?**
 
