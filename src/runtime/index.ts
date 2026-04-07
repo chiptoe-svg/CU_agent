@@ -3,7 +3,7 @@
 // Install SDKs with /add-agentSDK-codex or /add-agentSDK-claude.
 
 // claude
-// import './claude-runtime.js';
+import './claude-runtime.js';
 
 // codex (openai)
 import './openai-runtime.js';

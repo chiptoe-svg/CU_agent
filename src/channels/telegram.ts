@@ -5,6 +5,11 @@ import path from 'path';
 import { Api, Bot } from 'grammy';
 
 import {
+  getCurrentAuthMode,
+  hasValidOAuthCredentials,
+  switchAuthMode,
+} from '../auth-switch.js';
+import {
   ASSISTANT_NAME,
   AVAILABLE_MODELS,
   DATA_DIR,
@@ -145,11 +150,12 @@ export class TelegramChannel implements Channel {
       ctx.reply(`${ASSISTANT_NAME} is online.`);
     });
 
-    // Command to view auth status (SDK-specific sections added by /add-agentSDK-* skills)
+    // Command to view or switch auth mode (runtime-aware)
     this.bot.command('auth', async (ctx) => {
       const chatJid = `tg:${ctx.chat.id}`;
       const group = getRegisteredGroup(chatJid);
       const runtime = group?.containerConfig?.runtime || DEFAULT_RUNTIME;
+      const args = ctx.message?.text?.split(/\s+/).slice(1) || [];
 
       if (runtime === 'codex') {
         const envSecrets = readEnvFile(['OPENAI_API_KEY']);
@@ -161,22 +167,132 @@ export class TelegramChannel implements Channel {
         );
         const hasSubscription = fs.existsSync(codexAuthFile);
         const currentModel = group?.containerConfig?.model || DEFAULT_MODEL;
+
         let authMode: string;
-        if (hasSubscription && hasApiKey)
+        if (hasSubscription && hasApiKey) {
           authMode = 'Subscription (+ API key fallback)';
-        else if (hasSubscription) authMode = 'Subscription';
-        else if (hasApiKey) authMode = 'API Key';
-        else authMode = 'not configured';
+        } else if (hasSubscription) {
+          authMode = 'Subscription';
+        } else if (hasApiKey) {
+          authMode = 'API Key';
+        } else {
+          authMode = 'not configured';
+        }
+
+        if (args.length === 0) {
+          ctx.reply(
+            `Runtime: *OpenAI (Codex)*\nModel: ${currentModel}\nAuth: ${authMode}\n\nSwitch with:\n\`/auth subscription\` — use ChatGPT subscription\n\`/auth api\` — use API key from .env`,
+            { parse_mode: 'Markdown' },
+          );
+          return;
+        }
+
+        const target = args[0].toLowerCase();
+        if (target === 'subscription') {
+          if (hasSubscription) {
+            ctx.reply('Subscription auth already configured.');
+          } else {
+            ctx.reply(
+              'Run `codex auth login` on the server, then send `/auth` again to verify.',
+              { parse_mode: 'Markdown' },
+            );
+          }
+          return;
+        }
+        if (target === 'api') {
+          if (hasApiKey) {
+            ctx.reply('API key already configured in .env');
+          } else {
+            ctx.reply(
+              'Add `OPENAI_API_KEY=sk-...` to .env on the server, then restart the service.',
+              { parse_mode: 'Markdown' },
+            );
+          }
+          return;
+        }
+
+        ctx.reply('Usage: `/auth subscription` or `/auth api`', {
+          parse_mode: 'Markdown',
+        });
+        return;
+      }
+
+      // Claude runtime: show auth mode with switching options
+      const current = getCurrentAuthMode();
+
+      if (args.length === 0) {
+        const label =
+          current === 'api-key' ? 'API Key' : 'OAuth (Subscription)';
+        let credStatus: string;
+        if (current === 'api-key') {
+          credStatus = 'active (API key in .env)';
+        } else {
+          const envSecrets = readEnvFile([
+            'CLAUDE_CODE_OAUTH_TOKEN',
+            'ANTHROPIC_AUTH_TOKEN',
+          ]);
+          const hasEnvToken = !!(
+            envSecrets.CLAUDE_CODE_OAUTH_TOKEN ||
+            envSecrets.ANTHROPIC_AUTH_TOKEN
+          );
+          const hasCliCreds = hasValidOAuthCredentials();
+          if (hasEnvToken && hasCliCreds) {
+            credStatus = 'active (.env token + CLI auto-refresh)';
+          } else if (hasEnvToken) {
+            credStatus = 'active (.env token)';
+          } else if (hasCliCreds) {
+            credStatus = 'active (CLI auto-refresh)';
+          } else {
+            credStatus = 'no credentials found';
+          }
+        }
         ctx.reply(
-          `Runtime: *Codex*\nModel: ${currentModel}\nAuth: ${authMode}`,
+          `Runtime: *Claude*\nAuth mode: *${label}*\nCredentials: ${credStatus}\n\nSwitch with:\n\`/auth api\` — use API key\n\`/auth oauth\` — use subscription`,
           { parse_mode: 'Markdown' },
         );
         return;
       }
 
-      ctx.reply(`Runtime: *${runtime}*\nNo SDK-specific auth configured.`, {
+      const target = args[0].toLowerCase();
+      if (target !== 'api' && target !== 'oauth') {
+        ctx.reply('Usage: `/auth api` or `/auth oauth`', {
+          parse_mode: 'Markdown',
+        });
+        return;
+      }
+
+      const newMode = target === 'api' ? 'api-key' : 'oauth';
+      if (newMode === current) {
+        const label = current === 'api-key' ? 'API Key' : 'OAuth';
+        ctx.reply(`Already using ${label}.`);
+        return;
+      }
+
+      if (newMode === 'oauth' && !hasValidOAuthCredentials()) {
+        ctx.reply(
+          'No valid OAuth credentials found.\nRun `claude login` on the server first, then try again.',
+          { parse_mode: 'Markdown' },
+        );
+        return;
+      }
+
+      switchAuthMode(newMode as 'api-key' | 'oauth');
+      const label = newMode === 'api-key' ? 'API Key' : 'OAuth (Subscription)';
+      ctx.reply(`Switching to *${label}*...`, {
         parse_mode: 'Markdown',
       });
+
+      const flagPath = path.join(DATA_DIR, 'auth-switch-pending.json');
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+      fs.writeFileSync(
+        flagPath,
+        JSON.stringify({ chatId: ctx.chat.id, mode: newMode }),
+      );
+
+      logger.info({ newMode }, 'Auth mode changed, restarting service');
+      setTimeout(() => {
+        process.exit(0);
+      }, 1000);
     });
 
     // Command to view or switch model
@@ -514,7 +630,24 @@ export class TelegramChannel implements Channel {
             `  Send /chatid to the bot to get a chat's registration ID\n`,
           );
 
-          // Auth switch notification is handled by SDK-specific skills
+          // Send ready message if auth was just switched
+          try {
+            const flagPath = path.join(DATA_DIR, 'auth-switch-pending.json');
+            if (fs.existsSync(flagPath)) {
+              const flag = JSON.parse(fs.readFileSync(flagPath, 'utf-8'));
+              fs.unlinkSync(flagPath);
+              const mode = getCurrentAuthMode();
+              const label =
+                mode === 'api-key' ? 'API Key' : 'OAuth (Subscription)';
+              await this.bot!.api.sendMessage(
+                flag.chatId,
+                `${ASSISTANT_NAME} is back online.\nAuth mode: *${label}*`,
+                { parse_mode: 'Markdown' },
+              );
+            }
+          } catch (err) {
+            logger.debug({ err }, 'Failed to send auth switch notification');
+          }
 
           resolve();
         },
