@@ -30,8 +30,7 @@ export class GeminiRuntime implements AgentRuntime {
     this.containerManager = config.containerManager;
     this.groupFolder = config.group.folder;
 
-    const model =
-      config.group.containerConfig?.model || 'gemini-2.5-flash';
+    const model = config.group.containerConfig?.model || 'gemini-2.5-flash';
 
     const output = await config.containerManager.runAgentSession({
       group: config.group,

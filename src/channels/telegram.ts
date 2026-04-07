@@ -219,8 +219,11 @@ export class TelegramChannel implements Channel {
 
       if (runtime === 'gemini') {
         const envSecrets = readEnvFile(['GEMINI_API_KEY', 'GOOGLE_API_KEY']);
-        const hasKey = !!(envSecrets.GEMINI_API_KEY || envSecrets.GOOGLE_API_KEY);
-        const currentModel = group?.containerConfig?.model || 'gemini-2.5-flash';
+        const hasKey = !!(
+          envSecrets.GEMINI_API_KEY || envSecrets.GOOGLE_API_KEY
+        );
+        const currentModel =
+          group?.containerConfig?.model || 'gemini-2.5-flash';
         ctx.reply(
           `Runtime: *Gemini*\nModel: ${currentModel}\nAPI key: ${hasKey ? 'configured' : 'not configured (free tier available)'}`,
           { parse_mode: 'Markdown' },
