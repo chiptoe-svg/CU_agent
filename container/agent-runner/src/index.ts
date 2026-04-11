@@ -19,6 +19,7 @@ import {
   log,
   readStdin,
   runScript,
+  setupGwsCredentials,
   waitForIpcMessage,
   writeOutput,
 } from './shared.js';
@@ -60,6 +61,9 @@ async function main(): Promise<void> {
     });
     process.exit(1);
   }
+
+  // Set up Google Workspace CLI if credentials are mounted
+  setupGwsCredentials();
 
   const runtime = containerInput.runtime || 'claude';
   const handler = getContainerRuntime(runtime);

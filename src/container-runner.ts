@@ -6,6 +6,7 @@
  */
 import { ChildProcess, spawn } from 'child_process';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 
 import {
@@ -180,6 +181,26 @@ function buildVolumeMounts(
     containerPath: '/app/src',
     readonly: false,
   });
+
+  // MS365 token cache (if user has authenticated via `npm run ms365-login`)
+  const ms365TokenDir = path.join(os.homedir(), '.nanoclaw', '.ms365-tokens');
+  if (fs.existsSync(ms365TokenDir)) {
+    mounts.push({
+      hostPath: ms365TokenDir,
+      containerPath: '/workspace/.ms365-tokens',
+      readonly: false,
+    });
+  }
+
+  // Google Workspace CLI credentials (if user has authenticated via `gws auth login`)
+  const gwsTokenDir = path.join(os.homedir(), '.nanoclaw', '.gws-tokens');
+  if (fs.existsSync(gwsTokenDir)) {
+    mounts.push({
+      hostPath: gwsTokenDir,
+      containerPath: '/workspace/.gws-tokens',
+      readonly: true,
+    });
+  }
 
   // Additional mounts validated against external allowlist (tamper-proof from containers)
   if (group.containerConfig?.additionalMounts) {

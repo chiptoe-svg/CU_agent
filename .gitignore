@@ -9,16 +9,14 @@ store/
 data/
 logs/
 
-# Groups - only track base structure and specific CLAUDE.md files
+# Groups - only track AGENT.md persona files
 groups/*
-!groups/main/
 !groups/global/
-groups/main/*
+!groups/telegram_main/
 groups/global/*
-!groups/main/CLAUDE.md
-!groups/main/AGENT.md
-!groups/global/CLAUDE.md
+groups/telegram_main/*
 !groups/global/AGENT.md
+!groups/telegram_main/AGENT.md
 
 # Secrets
 *.keys.json
@@ -38,3 +36,4 @@ groups/global/*
 .nanoclaw/
 
 agents-sdk-docs
+data/models/

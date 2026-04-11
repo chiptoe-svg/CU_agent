@@ -293,7 +293,7 @@ export function getMcpServerConfig(
   mcpServerPath: string,
   containerInput: ContainerInput,
 ) {
-  return {
+  const config: Record<string, { command: string; args: string[]; env: Record<string, string> }> = {
     nanoclaw: {
       command: 'node',
       args: [mcpServerPath],
@@ -306,4 +306,55 @@ export function getMcpServerConfig(
       },
     },
   };
+
+  // Microsoft 365 MCP server (email, calendar, tasks, Teams, OneDrive, etc.)
+  // Only registered when token cache is mounted from host
+  const ms365TokenDir = '/workspace/.ms365-tokens';
+  const ms365TokenCache = path.join(ms365TokenDir, '.token-cache.json');
+  if (fs.existsSync(ms365TokenCache)) {
+    config.ms365 = {
+      command: 'npx',
+      args: [
+        '@softeria/ms-365-mcp-server', '--toon',
+        '--enabled-tools', '^(list-mail-(?!rule)|get-mail-(?!box)|create-mail-(?!rule)|delete-mail-(?!rule)|move-mail|update-mail-(?!rule)|add-mail|create-draft|list-calendar|get-calendar|create-calendar|update-calendar|delete-calendar|accept-calendar|decline-calendar|tentatively-accept|list-specific|get-specific|create-specific|update-specific|delete-specific|get-calendar-view|list-todo|get-todo|create-todo|update-todo|delete-todo|list-planner|get-planner|create-planner|update-planner|list-plan-tasks)',
+      ],
+      env: {
+        MS365_MCP_CLIENT_ID: '7556c30a-2955-4186-86cc-4ebc34809e4b',
+        MS365_MCP_TENANT_ID: '0c9bf8f6-ccad-4b87-818d-49026938aa97',
+        MS365_MCP_TOKEN_CACHE_PATH: ms365TokenCache,
+        MS365_MCP_SELECTED_ACCOUNT_PATH: path.join(ms365TokenDir, '.selected-account.json'),
+        SILENT: '1',
+      },
+    };
+  }
+
+  return config;
+}
+
+/**
+ * Set up Google Workspace CLI (`gws`) credentials if mounted from host.
+ * Copies credentials.json to gws config dir and sets env vars so
+ * gws uses plain-text storage (no keyring in containers).
+ */
+export function setupGwsCredentials(): void {
+  const gwsCredsSource = '/workspace/.gws-tokens/credentials.json';
+  if (!fs.existsSync(gwsCredsSource)) return;
+
+  const gwsConfigDir = path.join(process.env.HOME || '/home/node', '.config', 'gws');
+  fs.mkdirSync(gwsConfigDir, { recursive: true });
+
+  // Copy credentials as plain-text (container has no keyring)
+  const destPath = path.join(gwsConfigDir, 'credentials.json');
+  fs.copyFileSync(gwsCredsSource, destPath);
+
+  // Also copy client_secret.json if present
+  const clientSecretSource = '/workspace/.gws-tokens/client_secret.json';
+  if (fs.existsSync(clientSecretSource)) {
+    fs.copyFileSync(clientSecretSource, path.join(gwsConfigDir, 'client_secret.json'));
+  }
+
+  // Tell gws to use plain-text storage (no keyring)
+  process.env.GWS_CREDENTIAL_STORE = 'plaintext';
+
+  log('Configured Google Workspace CLI credentials');
 }

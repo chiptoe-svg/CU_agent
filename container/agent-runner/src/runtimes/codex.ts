@@ -88,6 +88,30 @@ NANOCLAW_MODEL = "${containerInput.model || 'gpt-5.4-mini'}"
     log('Wrote NanoClaw MCP config to Codex config.toml');
   }
 
+  // MS365 MCP server (email, calendar, tasks, Teams, etc.)
+  const ms365TokenCache = '/workspace/.ms365-tokens/.token-cache.json';
+  if (
+    fs.existsSync(ms365TokenCache) &&
+    !existingConfig.includes('[mcp_servers.ms365]')
+  ) {
+    const ms365Config = `
+[mcp_servers.ms365]
+type = "stdio"
+command = "npx"
+args = ["@softeria/ms-365-mcp-server", "--toon", "--enabled-tools", "^(list-mail-(?!rule)|get-mail-(?!box)|create-mail-(?!rule)|delete-mail-(?!rule)|move-mail|update-mail-(?!rule)|add-mail|create-draft|list-calendar|get-calendar|create-calendar|update-calendar|delete-calendar|accept-calendar|decline-calendar|tentatively-accept|list-specific|get-specific|create-specific|update-specific|delete-specific|get-calendar-view|list-todo|get-todo|create-todo|update-todo|delete-todo|list-planner|get-planner|create-planner|update-planner|list-plan-tasks)"]
+
+[mcp_servers.ms365.env]
+MS365_MCP_CLIENT_ID = "7556c30a-2955-4186-86cc-4ebc34809e4b"
+MS365_MCP_TENANT_ID = "0c9bf8f6-ccad-4b87-818d-49026938aa97"
+MS365_MCP_TOKEN_CACHE_PATH = "${ms365TokenCache}"
+MS365_MCP_SELECTED_ACCOUNT_PATH = "/workspace/.ms365-tokens/.selected-account.json"
+SILENT = "1"
+`;
+    const currentConfig = fs.readFileSync(configTomlPath, 'utf-8');
+    fs.writeFileSync(configTomlPath, currentConfig + ms365Config);
+    log('Wrote MS365 MCP config to Codex config.toml');
+  }
+
   // Discover additional directories (Fix #3)
   const extraDirs: string[] = [];
   const extraBase = '/workspace/extra';

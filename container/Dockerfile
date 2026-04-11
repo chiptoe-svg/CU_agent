@@ -36,6 +36,12 @@ RUN apt-get update && apt-get install -y python3 python3-pip python3-venv && rm 
 # Install shared tools globally. SDK CLIs are added by /add-agentSDK-* skills.
 RUN npm install -g agent-browser @anthropic-ai/claude-code @openai/codex
 
+# Install Google Workspace CLI (gws)
+RUN ARCH=$(dpkg --print-architecture) && \
+    if [ "$ARCH" = "arm64" ]; then GWS_ARCH="aarch64"; else GWS_ARCH="x86_64"; fi && \
+    curl -fsSL "https://github.com/googleworkspace/cli/releases/latest/download/google-workspace-cli-${GWS_ARCH}-unknown-linux-gnu.tar.gz" \
+    | tar xz --strip-components=0 -C /usr/local/bin/ ./gws && chmod +x /usr/local/bin/gws
+
 # Create app directory
 WORKDIR /app
 

@@ -15,12 +15,14 @@
     "prepare": "husky",
     "setup": "tsx setup/index.ts",
     "auth": "tsx src/whatsapp-auth.ts",
+    "ms365-login": "MS365_MCP_CLIENT_ID=7556c30a-2955-4186-86cc-4ebc34809e4b MS365_MCP_TENANT_ID=0c9bf8f6-ccad-4b87-818d-49026938aa97 MS365_MCP_TOKEN_CACHE_PATH=$HOME/.nanoclaw/.ms365-tokens/.token-cache.json MS365_MCP_SELECTED_ACCOUNT_PATH=$HOME/.nanoclaw/.ms365-tokens/.selected-account.json npx @softeria/ms-365-mcp-server --login --enabled-tools '^(list-mail-(?!rule)|get-mail-(?!box)|create-mail-(?!rule)|delete-mail-(?!rule)|move-mail|update-mail-(?!rule)|add-mail|create-draft|list-calendar|get-calendar|create-calendar|update-calendar|delete-calendar|accept-calendar|decline-calendar|tentatively-accept|list-specific|get-specific|create-specific|update-specific|delete-specific|get-calendar-view|list-todo|get-todo|create-todo|update-todo|delete-todo|list-planner|get-planner|create-planner|update-planner|list-plan-tasks)'",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@azure/msal-node": "^5.1.2",
     "@onecli-sh/sdk": "^0.2.0",
     "better-sqlite3": "11.10.0",
     "cron-parser": "5.5.0",

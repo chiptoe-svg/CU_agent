@@ -186,10 +186,10 @@ async function runClaudeQuery(
   let messageCount = 0;
   let resultCount = 0;
 
-  // Ensure CLAUDE.md exists from AGENT.md
+  // Sync AGENT.md → CLAUDE.md so the Claude SDK discovers it
   const groupAgentMd = '/workspace/group/AGENT.md';
   const groupClaudeMd = '/workspace/group/CLAUDE.md';
-  if (fs.existsSync(groupAgentMd) && !fs.existsSync(groupClaudeMd)) {
+  if (fs.existsSync(groupAgentMd)) {
     fs.copyFileSync(groupAgentMd, groupClaudeMd);
   }
 
@@ -227,7 +227,7 @@ async function runClaudeQuery(
         'Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep',
         'WebSearch', 'WebFetch', 'Task', 'TaskOutput', 'TaskStop',
         'TeamCreate', 'TeamDelete', 'SendMessage', 'TodoWrite',
-        'ToolSearch', 'Skill', 'NotebookEdit', 'mcp__nanoclaw__*',
+        'ToolSearch', 'Skill', 'NotebookEdit', 'mcp__nanoclaw__*', 'mcp__ms365__*',
       ],
       env: sdkEnv,
       permissionMode: 'bypassPermissions',
