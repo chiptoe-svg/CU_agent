@@ -77,8 +77,8 @@ Run `/setup` inside the CLI. It handles everything: dependencies, container runt
 - **Credential security** — Claude uses a credential proxy (containers see placeholders). Codex mounts subscription auth. Gemini uses API key injection. Secrets never exposed to agents.
 - **Agent teams** — Claude SDK supports multi-agent orchestration via TeamCreate/TeamDelete. Gemini ADK supports native sub-agents (SequentialAgent, ParallelAgent, LoopAgent). All runtimes support specialist delegation via MCP tool.
 - **Skills system** — Add capabilities with `/add-*` skills. All SDKs load skills on-demand from their respective directories.
-- **Provider plugins** — External services (MS365, Google Workspace, IMAP) configured as JSON files — add or remove a provider without code changes. Token mounts, MCP servers, allowed tools, and agent docs are all declared in the provider config.
-- **Email management** — Register email accounts (`/add-email-account`), calibrate sender rules (`/add-email-archive`), and batch-classify emails toward inbox zero (`/email-archive`). Provider-agnostic — works with Gmail, Outlook, and IMAP.
+- **Provider plugins** — External services (MS365, Google Workspace, IMAP) described as JSON config files — add or remove a provider without code changes. Token mounts, MCP servers, allowed tools, and agent docs are all declared in the config. Providers are definitions only — run `/add-email-account` to authenticate and activate.
+- **Email management** — Register email accounts (`/add-email-account`), calibrate sender rules (`/add-email-archive`), and batch-classify emails toward inbox zero (`/email-archive`). Provider-agnostic — works with any configured email account.
 
 ## Usage
 
@@ -201,8 +201,9 @@ Each group is isolated by folder, persona, memory, IPC namespace, and runtime ho
 
 Provider integrations follow the same pattern:
 
-- `container/providers/*.json` — built-in provider definitions shipped with the repo
-- `~/.nanoclaw/providers/*.json` — active host-side provider configs copied on startup
+- `container/providers/*.json` — shipped provider definitions (ms365, gws, imap)
+- `~/.nanoclaw/providers/*.json` — active host-side provider configs (copied from defaults on first startup)
+- providers are definitions only — `/add-email-account` handles authentication and activation
 - provider tokens stay on the host and are mounted into containers only when allowed by the launcher
 - the in-container provider registry turns mounted credentials into MCP servers, init hooks, allowed tools, and appended agent docs
 
@@ -297,7 +298,7 @@ Yes. The project has persona files for all three: `CLAUDE.md` (Claude Code), `AG
 
 **How do I add a new external service (email provider, API, etc.)?**
 
-Add a provider JSON file under `container/providers/`. On startup, NanoClaw copies built-in provider configs into `~/.nanoclaw/providers/` if they are missing. Each provider file declares token paths, MCP server config, allowed tools, init hooks, and agent docs. See `container/providers/ms365.json` as an example.
+Add a provider JSON file under `container/providers/`. On startup, NanoClaw copies shipped provider configs into `~/.nanoclaw/providers/` if they are missing. Each provider file declares token paths, MCP server config, allowed tools, init hooks, and agent docs — but the provider is inactive until you authenticate via `/add-email-account` or `npm run provider-login`. See `container/providers/ms365.json` as an example.
 
 **How do I debug issues?**
 
