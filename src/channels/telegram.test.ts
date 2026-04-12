@@ -31,11 +31,27 @@ vi.mock('../group-folder.js', () => ({
   ),
 }));
 
+// Mock transcription (voice handler calls transcribeAudio which needs ffmpeg/whisper)
+vi.mock('../transcription.js', () => ({
+  transcribeAudio: vi.fn(() => Promise.resolve(null)),
+}));
+
 // --- Grammy mock ---
 
-type Handler = (...args: any[]) => any;
+type Handler = (...args: unknown[]) => unknown;
+type BotInfo = { username: string; id: number };
+type MockBot = {
+  commandHandlers: Map<string, Handler>;
+  filterHandlers: Map<string, Handler[]>;
+  errorHandler: Handler | null;
+  api: {
+    sendMessage: ReturnType<typeof vi.fn>;
+    sendChatAction: ReturnType<typeof vi.fn>;
+    getFile: ReturnType<typeof vi.fn>;
+  };
+};
 
-const botRef = vi.hoisted(() => ({ current: null as any }));
+const botRef = vi.hoisted(() => ({ current: null as MockBot | null }));
 
 vi.mock('grammy', () => ({
   Bot: class MockBot {
@@ -69,7 +85,7 @@ vi.mock('grammy', () => ({
       this.errorHandler = handler;
     }
 
-    start(opts: { onStart: (botInfo: any) => void }) {
+    start(opts: { onStart: (botInfo: BotInfo) => void }) {
       opts.onStart({ username: 'andy_ai_bot', id: 12345 });
     }
 
@@ -100,6 +116,25 @@ function createTestOpts(
   };
 }
 
+type TextCtx = {
+  chat: { id: number; type: string; title: string };
+  from: { id: number; first_name?: string; username?: string };
+  message: {
+    text: string;
+    date: number;
+    message_id: number;
+    entities: Array<{ type: string; offset: number; length: number }>;
+    reply_to_message?: {
+      message_id?: number;
+      text?: string;
+      caption?: string;
+      from?: { first_name?: string; username?: string; id?: number };
+    };
+  };
+  me: { username: string };
+  reply: ReturnType<typeof vi.fn>;
+};
+
 function createTextCtx(overrides: {
   chatId?: number;
   chatType?: string;
@@ -110,9 +145,14 @@ function createTextCtx(overrides: {
   username?: string;
   messageId?: number;
   date?: number;
-  entities?: any[];
-  reply_to_message?: any;
-}) {
+  entities?: Array<{ type: string; offset: number; length: number }>;
+  reply_to_message?: {
+    message_id?: number;
+    text?: string;
+    caption?: string;
+    from?: { first_name?: string; username?: string; id?: number };
+  };
+}): TextCtx {
   const chatId = overrides.chatId ?? 100200300;
   const chatType = overrides.chatType ?? 'group';
   return {
@@ -146,7 +186,7 @@ function createMediaCtx(overrides: {
   date?: number;
   messageId?: number;
   caption?: string;
-  extra?: Record<string, any>;
+  extra?: Record<string, unknown>;
 }) {
   const chatId = overrides.chatId ?? 100200300;
   return {
@@ -171,6 +211,9 @@ function createMediaCtx(overrides: {
 }
 
 function currentBot() {
+  if (!botRef.current) {
+    throw new Error('Mock bot not initialized');
+  }
   return botRef.current;
 }
 
@@ -189,8 +232,13 @@ async function triggerMediaMessage(
 
 // --- Tests ---
 
-// Helper: flush pending microtasks (for async downloadFile().then() chains)
-const flushPromises = () => new Promise((resolve) => setTimeout(resolve, 0));
+// Helper: flush pending microtasks (for async downloadFile().then() chains).
+// Multiple ticks needed when handlers chain several awaits (e.g. voice transcription).
+const flushPromises = async () => {
+  for (let i = 0; i < 5; i++) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+};
 
 describe('TelegramChannel', () => {
   beforeEach(() => {
@@ -368,7 +416,7 @@ describe('TelegramChannel', () => {
       await channel.connect();
 
       const ctx = createTextCtx({ text: 'Hi' });
-      ctx.from.first_name = undefined as any;
+      ctx.from.first_name = undefined;
       await triggerTextMessage(ctx);
 
       expect(opts.onMessage).toHaveBeenCalledWith(
@@ -383,8 +431,8 @@ describe('TelegramChannel', () => {
       await channel.connect();
 
       const ctx = createTextCtx({ text: 'Hi', fromId: 42 });
-      ctx.from.first_name = undefined as any;
-      ctx.from.username = undefined as any;
+      ctx.from.first_name = undefined;
+      ctx.from.username = undefined;
       await triggerTextMessage(ctx);
 
       expect(opts.onMessage).toHaveBeenCalledWith(

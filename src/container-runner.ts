@@ -31,6 +31,10 @@ import { validateAdditionalMounts } from './mount-security.js';
 import { getRuntimeSetup } from './runtime-setup.js';
 import { RegisteredGroup } from './types.js';
 
+function isExpectedContainerError(err: unknown): err is Error {
+  return err instanceof Error;
+}
+
 // Sentinel markers for robust output parsing (must match agent-runner)
 const OUTPUT_START_MARKER = '---NANOCLAW_OUTPUT_START---';
 const OUTPUT_END_MARKER = '---NANOCLAW_OUTPUT_END---';
@@ -396,6 +400,7 @@ export async function runContainerAgent(
             // so idle timers start even for "silent" query completions.
             outputChain = outputChain.then(() => onOutput(parsed));
           } catch (err) {
+            if (!(err instanceof SyntaxError)) throw err;
             logger.warn(
               { group: group.name, error: err },
               'Failed to parse streamed output chunk',
@@ -443,6 +448,7 @@ export async function runContainerAgent(
       try {
         stopContainer(containerName);
       } catch (err) {
+        if (!isExpectedContainerError(err)) throw err;
         logger.warn(
           { group: group.name, containerName, err },
           'Graceful stop failed, force killing',
@@ -646,6 +652,7 @@ export async function runContainerAgent(
 
         resolve(output);
       } catch (err) {
+        if (!(err instanceof SyntaxError)) throw err;
         logger.error(
           {
             group: group.name,

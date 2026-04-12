@@ -27,6 +27,10 @@ interface GroupState {
   retryCount: number;
 }
 
+function isExpectedFsError(err: unknown): err is NodeJS.ErrnoException {
+  return err instanceof Error;
+}
+
 export class GroupQueue {
   private groups = new Map<string, GroupState>();
   private activeCount = 0;
@@ -172,7 +176,9 @@ export class GroupQueue {
       fs.writeFileSync(tempPath, JSON.stringify({ type: 'message', text }));
       fs.renameSync(tempPath, filepath);
       return true;
-    } catch {
+    } catch (err) {
+      if (!isExpectedFsError(err)) throw err;
+      logger.debug({ groupJid, err }, 'Failed to write IPC message');
       return false;
     }
   }
@@ -188,8 +194,9 @@ export class GroupQueue {
     try {
       fs.mkdirSync(inputDir, { recursive: true });
       fs.writeFileSync(path.join(inputDir, '_close'), '');
-    } catch {
-      // ignore
+    } catch (err) {
+      if (!isExpectedFsError(err)) throw err;
+      logger.debug({ groupJid, err }, 'Failed to write close sentinel');
     }
   }
 
@@ -219,6 +226,7 @@ export class GroupQueue {
         }
       }
     } catch (err) {
+      if (!(err instanceof Error)) throw err;
       logger.error({ groupJid, err }, 'Error processing messages for group');
       this.scheduleRetry(groupJid, state);
     } finally {
@@ -247,6 +255,7 @@ export class GroupQueue {
     try {
       await task.fn();
     } catch (err) {
+      if (!(err instanceof Error)) throw err;
       logger.error({ groupJid, taskId: task.id, err }, 'Error running task');
     } finally {
       state.active = false;

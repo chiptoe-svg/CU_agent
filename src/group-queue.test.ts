@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import type { ChildProcess } from 'child_process';
 
 import { GroupQueue } from './group-queue.js';
 
@@ -24,6 +25,7 @@ vi.mock('fs', async () => {
 
 describe('GroupQueue', () => {
   let queue: GroupQueue;
+  const mockProcess = {} as ChildProcess;
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -300,7 +302,7 @@ describe('GroupQueue', () => {
     // Register a process so closeStdin has a groupFolder
     queue.registerProcess(
       'group1@g.us',
-      {} as any,
+      mockProcess,
       'container-1',
       'test-group',
     );
@@ -340,7 +342,7 @@ describe('GroupQueue', () => {
     // Register process and mark idle
     queue.registerProcess(
       'group1@g.us',
-      {} as any,
+      mockProcess,
       'container-1',
       'test-group',
     );
@@ -379,7 +381,7 @@ describe('GroupQueue', () => {
     await vi.advanceTimersByTimeAsync(10);
     queue.registerProcess(
       'group1@g.us',
-      {} as any,
+      mockProcess,
       'container-1',
       'test-group',
     );
@@ -420,7 +422,7 @@ describe('GroupQueue', () => {
     await vi.advanceTimersByTimeAsync(10);
     queue.registerProcess(
       'group1@g.us',
-      {} as any,
+      mockProcess,
       'container-1',
       'test-group',
     );
@@ -453,7 +455,7 @@ describe('GroupQueue', () => {
     // Register process and enqueue a task (no idle yet — no preemption)
     queue.registerProcess(
       'group1@g.us',
-      {} as any,
+      mockProcess,
       'container-1',
       'test-group',
     );

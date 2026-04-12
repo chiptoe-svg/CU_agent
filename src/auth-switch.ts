@@ -51,7 +51,8 @@ export function hasValidOAuthCredentials(): boolean {
       return false;
     }
     return true;
-  } catch {
+  } catch (err) {
+    logger.debug({ err }, 'Failed to read Claude OAuth credentials');
     return false;
   }
 }

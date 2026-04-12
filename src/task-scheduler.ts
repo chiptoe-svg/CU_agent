@@ -22,6 +22,10 @@ import { resolveGroupFolderPath } from './group-folder.js';
 import { logger } from './logger.js';
 import { RegisteredGroup, ScheduledTask } from './types.js';
 
+function isExpectedTaskError(err: unknown): err is Error {
+  return err instanceof Error;
+}
+
 /**
  * Compute the next run time for a recurring task, anchored to the
  * task's scheduled time rather than Date.now() to prevent cumulative
@@ -88,6 +92,7 @@ async function runTask(
   try {
     groupDir = resolveGroupFolderPath(task.group_folder);
   } catch (err) {
+    if (!isExpectedTaskError(err)) throw err;
     const error = err instanceof Error ? err.message : String(err);
     // Stop retry churn for malformed legacy rows.
     updateTask(task.id, { status: 'paused' });
@@ -231,6 +236,7 @@ async function runTask(
       'Task completed',
     );
   } catch (err) {
+    if (!isExpectedTaskError(err)) throw err;
     if (closeTimer) clearTimeout(closeTimer);
     error = err instanceof Error ? err.message : String(err);
     logger.error({ taskId: task.id, error }, 'Task failed');
@@ -285,6 +291,7 @@ export function startSchedulerLoop(deps: SchedulerDependencies): void {
         );
       }
     } catch (err) {
+      if (!isExpectedTaskError(err)) throw err;
       logger.error({ err }, 'Error in scheduler loop');
     }
 

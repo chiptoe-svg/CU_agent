@@ -5,8 +5,6 @@
  * ContainerManager.runAgentSession(). The container agent-runner detects
  * runtime='gemini' and starts the Google ADK sidecar.
  */
-import { DEFAULT_MODEL } from '../config.js';
-
 import type {
   AgentEvent,
   AgentRuntime,

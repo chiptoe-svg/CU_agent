@@ -14,6 +14,18 @@ import {
 
 let db: Database.Database;
 
+function isDuplicateColumnMigrationError(err: unknown): err is Error {
+  return err instanceof Error && /duplicate column name/i.test(err.message);
+}
+
+function isJsonMigrationError(err: unknown): err is Error {
+  return err instanceof Error;
+}
+
+function isInvalidRegisteredGroupFolderError(err: unknown): err is Error {
+  return err instanceof Error && /Invalid group folder/.test(err.message);
+}
+
 function createSchema(database: Database.Database): void {
   database.exec(`
     CREATE TABLE IF NOT EXISTS chats (
@@ -89,14 +101,16 @@ function createSchema(database: Database.Database): void {
     database.exec(
       `ALTER TABLE scheduled_tasks ADD COLUMN context_mode TEXT DEFAULT 'isolated'`,
     );
-  } catch {
+  } catch (err) {
+    if (!isDuplicateColumnMigrationError(err)) throw err;
     /* column already exists */
   }
 
   // Add script column if it doesn't exist (migration for existing DBs)
   try {
     database.exec(`ALTER TABLE scheduled_tasks ADD COLUMN script TEXT`);
-  } catch {
+  } catch (err) {
+    if (!isDuplicateColumnMigrationError(err)) throw err;
     /* column already exists */
   }
 
@@ -109,7 +123,8 @@ function createSchema(database: Database.Database): void {
     database
       .prepare(`UPDATE messages SET is_bot_message = 1 WHERE content LIKE ?`)
       .run(`${ASSISTANT_NAME}:%`);
-  } catch {
+  } catch (err) {
+    if (!isDuplicateColumnMigrationError(err)) throw err;
     /* column already exists */
   }
 
@@ -122,7 +137,8 @@ function createSchema(database: Database.Database): void {
     database.exec(
       `UPDATE registered_groups SET is_main = 1 WHERE folder = 'main'`,
     );
-  } catch {
+  } catch (err) {
+    if (!isDuplicateColumnMigrationError(err)) throw err;
     /* column already exists */
   }
 
@@ -143,7 +159,8 @@ function createSchema(database: Database.Database): void {
     database.exec(
       `UPDATE chats SET channel = 'telegram', is_group = 0 WHERE jid LIKE 'tg:%'`,
     );
-  } catch {
+  } catch (err) {
+    if (!isDuplicateColumnMigrationError(err)) throw err;
     /* columns already exist */
   }
 
@@ -154,7 +171,8 @@ function createSchema(database: Database.Database): void {
       `ALTER TABLE messages ADD COLUMN reply_to_message_content TEXT`,
     );
     database.exec(`ALTER TABLE messages ADD COLUMN reply_to_sender_name TEXT`);
-  } catch {
+  } catch (err) {
+    if (!isDuplicateColumnMigrationError(err)) throw err;
     /* columns already exist */
   }
 }
@@ -699,7 +717,9 @@ function migrateJsonState(): void {
       const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
       fs.renameSync(filePath, `${filePath}.migrated`);
       return data;
-    } catch {
+    } catch (err) {
+      if (!isJsonMigrationError(err)) throw err;
+      logger.warn({ filePath, err }, 'Failed to migrate legacy JSON state');
       return null;
     }
   };
@@ -742,6 +762,7 @@ function migrateJsonState(): void {
       try {
         setRegisteredGroup(jid, group);
       } catch (err) {
+        if (!isInvalidRegisteredGroupFolderError(err)) throw err;
         logger.warn(
           { jid, folder: group.folder, err },
           'Skipping migrated registered group with invalid folder',
