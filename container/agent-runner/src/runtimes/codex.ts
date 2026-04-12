@@ -112,7 +112,9 @@ async function runCodexQuery(
     log(`Assembled AGENTS.md from ${agentsParts.length} source(s)`);
   }
 
-  // Write MCP server config for Codex
+  // Write MCP server config for Codex.
+  // Strip all [mcp_servers.*] from any existing config and rewrite fresh.
+  // This prevents stale/duplicate MCP blocks from crashing Codex.
   const codexConfigDir = path.join(
     process.env.HOME || '/home/node',
     '.codex',
@@ -120,24 +122,26 @@ async function runCodexQuery(
   fs.mkdirSync(codexConfigDir, { recursive: true });
   const configTomlPath = path.join(codexConfigDir, 'config.toml');
 
-  let existingConfig = '';
+  // Preserve non-MCP settings (plugins, features, projects, sandbox)
+  let baseConfig = '';
   if (fs.existsSync(configTomlPath)) {
-    existingConfig = fs.readFileSync(configTomlPath, 'utf-8');
+    const existing = fs.readFileSync(configTomlPath, 'utf-8');
+    // Keep everything before the first [mcp_servers section
+    const mcpIdx = existing.indexOf('[mcp_servers');
+    baseConfig = mcpIdx !== -1 ? existing.slice(0, mcpIdx).trimEnd() : existing.trimEnd();
   }
-  if (!existingConfig.includes('[mcp_servers.nanoclaw]')) {
-    const mcpConfig = `
-# Disable bwrap sandbox — container is already sandboxed by Docker
-[features]
-use_linux_sandbox_bwrap = false
 
-[sandbox_workspace_write]
-network_access = true
+  // Ensure sandbox settings exist
+  if (!baseConfig.includes('[features]')) {
+    baseConfig += `\n\n# Disable bwrap sandbox — container is already sandboxed by Docker\n[features]\nuse_linux_sandbox_bwrap = false\n\n[sandbox_workspace_write]\nnetwork_access = true`;
+  }
 
+  // Build fresh MCP server config
+  const mcpConfig = `
 [mcp_servers.nanoclaw]
 type = "stdio"
 command = "node"
 args = ["${mcpServerPath}"]
-
 [mcp_servers.nanoclaw.env]
 NANOCLAW_CHAT_JID = "${containerInput.chatJid}"
 NANOCLAW_GROUP_FOLDER = "${containerInput.groupFolder}"
@@ -145,36 +149,15 @@ NANOCLAW_IS_MAIN = "${containerInput.isMain ? '1' : '0'}"
 NANOCLAW_RUNTIME = "codex"
 NANOCLAW_MODEL = "${modelRef}"
 `;
-    fs.writeFileSync(configTomlPath, existingConfig + mcpConfig);
-    log('Wrote NanoClaw MCP config to Codex config.toml');
-  }
 
   // Provider-based MCP servers (MS365, etc.)
-  // Each provider JSON in /workspace/.providers/ can declare an MCP server.
-  // Always overwrite provider blocks to ensure env vars are current —
-  // stale persisted configs may lack env vars added by the provider registry.
   const providerToml = getProviderCodexToml();
-  if (providerToml) {
-    let currentConfig = fs.readFileSync(configTomlPath, 'utf-8');
-    // Remove existing provider blocks so we can write fresh ones with env vars
-    for (const block of providerToml.split('\n\n')) {
-      const match = block.match(/\[mcp_servers\.(\w+)\]/);
-      if (match) {
-        // Remove old block: from [mcp_servers.X] to next [section] or EOF
-        const sectionHeader = `[mcp_servers.${match[1]}]`;
-        const startIdx = currentConfig.indexOf(sectionHeader);
-        if (startIdx !== -1) {
-          // Find the next top-level section (starts with [ at line beginning)
-          const afterHeader = currentConfig.indexOf('\n[', startIdx + sectionHeader.length);
-          const endIdx = afterHeader !== -1 ? afterHeader : currentConfig.length;
-          currentConfig = currentConfig.slice(0, startIdx) + currentConfig.slice(endIdx);
-        }
-      }
-    }
-    // Append fresh provider blocks with resolved env vars
-    fs.writeFileSync(configTomlPath, currentConfig.trimEnd() + '\n\n' + providerToml + '\n');
-    log('Wrote provider MCP config(s) to Codex config.toml');
-  }
+
+  fs.writeFileSync(
+    configTomlPath,
+    baseConfig + '\n\n' + mcpConfig + (providerToml ? '\n' + providerToml + '\n' : ''),
+  );
+  log('Wrote MCP config to Codex config.toml (clean rebuild)');
 
   // Discover additional directories (Fix #3)
   const extraDirs: string[] = [];
