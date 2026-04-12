@@ -56,6 +56,7 @@ import {
 import { GroupQueue } from './group-queue.js';
 import { resolveGroupFolderPath } from './group-folder.js';
 import { startIpcWatcher } from './ipc.js';
+import { ensureDefaultProviders } from './provider-registry.js';
 import { findChannel, formatMessages, formatOutbound } from './router.js';
 import {
   restoreRemoteControl,
@@ -600,6 +601,10 @@ function ensureContainerSystemRunning(): void {
 
 async function main(): Promise<void> {
   ensureContainerSystemRunning();
+
+  // Copy default provider configs to ~/.nanoclaw/providers/ if not present
+  ensureDefaultProviders(process.cwd());
+
   initDatabase();
   logger.info('Database initialized');
   loadState();

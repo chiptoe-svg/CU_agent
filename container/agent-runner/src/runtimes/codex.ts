@@ -16,6 +16,7 @@ import {
   shouldClose,
   writeOutput,
 } from '../shared.js';
+import { getProviderCodexToml, getProviderAgentDocs } from '../provider-registry.js';
 import { registerContainerRuntime, type QueryResult } from '../runtime-registry.js';
 
 /** Codex-specific tool guidance — injected into AGENTS.md during assembly */
@@ -64,6 +65,12 @@ async function runCodexQuery(
   }
   agentsParts.push(CODEX_TOOL_GUIDANCE);
 
+  // Append provider-specific docs (MS365, GWS, etc.)
+  const providerDocs = getProviderAgentDocs();
+  if (providerDocs) {
+    agentsParts.push(providerDocs);
+  }
+
   if (agentsParts.length > 0) {
     fs.writeFileSync(
       '/workspace/group/AGENTS.md',
@@ -109,28 +116,22 @@ NANOCLAW_MODEL = "${modelRef}"
     log('Wrote NanoClaw MCP config to Codex config.toml');
   }
 
-  // MS365 MCP server (email, calendar, tasks, Teams, etc.)
-  const ms365TokenCache = '/workspace/.ms365-tokens/.token-cache.json';
-  if (
-    fs.existsSync(ms365TokenCache) &&
-    !existingConfig.includes('[mcp_servers.ms365]')
-  ) {
-    const ms365Config = `
-[mcp_servers.ms365]
-type = "stdio"
-command = "npx"
-args = ["@softeria/ms-365-mcp-server", "--toon", "--enabled-tools", "^(list-mail-(?!rule)|get-mail-(?!box)|create-mail-(?!rule)|delete-mail-(?!rule)|move-mail|update-mail-(?!rule)|add-mail|create-draft|list-calendar|get-calendar|create-calendar|update-calendar|delete-calendar|accept-calendar|decline-calendar|tentatively-accept|list-specific|get-specific|create-specific|update-specific|delete-specific|get-calendar-view|list-todo|get-todo|create-todo|update-todo|delete-todo|list-planner|get-planner|create-planner|update-planner|list-plan-tasks)"]
-
-[mcp_servers.ms365.env]
-MS365_MCP_CLIENT_ID = "7556c30a-2955-4186-86cc-4ebc34809e4b"
-MS365_MCP_TENANT_ID = "0c9bf8f6-ccad-4b87-818d-49026938aa97"
-MS365_MCP_TOKEN_CACHE_PATH = "${ms365TokenCache}"
-MS365_MCP_SELECTED_ACCOUNT_PATH = "/workspace/.ms365-tokens/.selected-account.json"
-SILENT = "1"
-`;
+  // Provider-based MCP servers (MS365, etc.)
+  // Each provider JSON in /workspace/.providers/ can declare an MCP server.
+  const providerToml = getProviderCodexToml();
+  if (providerToml) {
     const currentConfig = fs.readFileSync(configTomlPath, 'utf-8');
-    fs.writeFileSync(configTomlPath, currentConfig + ms365Config);
-    log('Wrote MS365 MCP config to Codex config.toml');
+    // Only append providers not already in config
+    const newBlocks = providerToml
+      .split('\n\n')
+      .filter((block) => {
+        const match = block.match(/\[mcp_servers\.(\w+)\]/);
+        return match && !currentConfig.includes(`[mcp_servers.${match[1]}]`);
+      });
+    if (newBlocks.length > 0) {
+      fs.writeFileSync(configTomlPath, currentConfig + '\n' + newBlocks.join('\n\n'));
+      log(`Wrote ${newBlocks.length} provider MCP config(s) to Codex config.toml`);
+    }
   }
 
   // Discover additional directories (Fix #3)

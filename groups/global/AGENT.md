@@ -16,39 +16,11 @@
 - Run bash commands in your sandbox
 - Schedule tasks to run later or on a recurring basis
 - Send messages back to the chat
-- Access Microsoft 365 via MCP tools (ms365): read/manage email, calendars, and tasks
-- Access Google Workspace via the `gws` CLI: Drive, Gmail, Calendar, Sheets, Docs, Slides
+- Access external services via configured providers (email, calendar, files, etc.)
 
-## Microsoft 365 (Outlook, Calendar, Tasks)
-
-You have MCP tools prefixed with `mcp__ms365__` for accessing the user's Microsoft 365 account. Use these when the user asks about email, calendar events, or tasks.
-
-Available capabilities:
-- *Email*: list, read, search, create drafts, move, delete messages and attachments. You cannot send, forward, or reply to emails.
-- *Calendar*: list, read, create, update, delete events. Accept/decline/tentatively accept invitations. View calendar availability.
-- *Tasks*: list, read, create, update, delete To Do tasks and Planner tasks.
-
-Not available: sending mail, mail rules, mailbox settings, files/OneDrive, contacts, Teams chat.
-
-## Google Workspace (tonkin@g.clemson.edu)
-
-You have the `gws` CLI for accessing the user's Clemson Google Workspace account. Run it via bash. Always set `GWS_CREDENTIAL_STORE=plaintext` before running gws commands.
-
-Common helpers (use `gws <service> --help` for full list):
-- *Gmail*: `gws gmail +triage` (inbox summary), `gws gmail +read <messageId>`, `gws gmail +send`
-- *Calendar*: `gws calendar events list --params '{"calendarId":"primary"}'`
-- *Drive*: `gws drive files list`, `gws drive +upload`, `gws drive +download`
-- *Sheets*: `gws sheets spreadsheets get --params '{"spreadsheetId":"..."}'`
-- *Docs*: `gws docs documents get --params '{"documentId":"..."}'`
-- *Slides*: `gws slides presentations get --params '{"presentationId":"..."}'`
-
-Helper commands use `+` prefix (e.g., `+triage`, `+read`, `+send`). API commands use resource paths (e.g., `events list`, `files list`). Use `--params '{...}'` for JSON parameters.
-
-Example:
-```
-GWS_CREDENTIAL_STORE=plaintext gws gmail +triage
-GWS_CREDENTIAL_STORE=plaintext gws calendar events list --params '{"calendarId":"primary"}'
-```
+<!-- Provider-specific docs (Microsoft 365, Google Workspace, etc.) are injected
+     dynamically by the agent-runner from provider JSON configs in /workspace/.providers/.
+     Do not hardcode provider docs here. -->
 
 ## Communication
 

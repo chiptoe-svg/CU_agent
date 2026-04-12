@@ -6,7 +6,6 @@
  */
 import { ChildProcess, spawn } from 'child_process';
 import fs from 'fs';
-import os from 'os';
 import path from 'path';
 
 import {
@@ -28,6 +27,7 @@ import {
   stopContainer,
 } from './container-runtime.js';
 import { validateAdditionalMounts } from './mount-security.js';
+import { getProviderMounts } from './provider-registry.js';
 import { getRuntimeSetup } from './runtime-setup.js';
 import { RegisteredGroup } from './types.js';
 
@@ -202,25 +202,10 @@ function buildVolumeMounts(
     readonly: false,
   });
 
-  // MS365 token cache (if user has authenticated via `npm run ms365-login`)
-  const ms365TokenDir = path.join(os.homedir(), '.nanoclaw', '.ms365-tokens');
-  if (fs.existsSync(ms365TokenDir)) {
-    mounts.push({
-      hostPath: ms365TokenDir,
-      containerPath: '/workspace/.ms365-tokens',
-      readonly: false,
-    });
-  }
-
-  // Google Workspace CLI credentials (if user has authenticated via `gws auth login`)
-  const gwsTokenDir = path.join(os.homedir(), '.nanoclaw', '.gws-tokens');
-  if (fs.existsSync(gwsTokenDir)) {
-    mounts.push({
-      hostPath: gwsTokenDir,
-      containerPath: '/workspace/.gws-tokens',
-      readonly: true,
-    });
-  }
+  // Provider-based token mounts (MS365, GWS, IMAP, etc.)
+  // Each provider JSON in ~/.nanoclaw/providers/ declares its token paths.
+  // Only mounts directories that exist on the host.
+  mounts.push(...getProviderMounts());
 
   // Additional mounts validated against external allowlist (tamper-proof from containers)
   if (group.containerConfig?.additionalMounts) {

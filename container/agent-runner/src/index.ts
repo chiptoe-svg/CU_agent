@@ -19,10 +19,10 @@ import {
   log,
   readStdin,
   runScript,
-  setupGwsCredentials,
   waitForIpcMessage,
   writeOutput,
 } from './shared.js';
+import { runProviderInits } from './provider-registry.js';
 import {
   getContainerRuntime,
   getRegisteredContainerRuntimeNames,
@@ -39,6 +39,11 @@ try { await import('./runtimes/codex.js'); } catch { /* SDK not installed */ }
 
 // gemini (google)
 try { await import('./runtimes/gemini.js'); } catch { /* CLI not installed */ }
+
+// --- Provider init hooks ---
+// Each provider can register an init function (e.g., gws credential setup).
+// Import triggers self-registration; the hooks run later via runProviderInits().
+try { await import('./providers/gws-init.js'); } catch { /* optional */ }
 
 // --- Main ---
 
@@ -62,8 +67,8 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  // Set up Google Workspace CLI if credentials are mounted
-  setupGwsCredentials();
+  // Run provider init hooks (GWS credential setup, etc.)
+  runProviderInits();
 
   const runtime = containerInput.runtime || 'claude';
   const handler = getContainerRuntime(runtime);

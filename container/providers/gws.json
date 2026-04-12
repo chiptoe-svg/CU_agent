@@ -1,0 +1,26 @@
+{
+  "id": "gws",
+  "name": "Google Workspace",
+  "description": "Gmail, Calendar, Drive, Sheets, Docs, Slides via gws CLI",
+
+  "tokenPaths": {
+    "host": "~/.nanoclaw/.gws-tokens",
+    "container": "/workspace/.gws-tokens",
+    "readonly": true,
+    "requiredFile": "credentials.json"
+  },
+
+  "mcp": null,
+
+  "allowedTools": [],
+
+  "init": "gws-init",
+
+  "agentDocs": "## Google Workspace\n\nYou have the `gws` CLI for accessing the user's Google Workspace account. Run it via bash. Always set `GWS_CREDENTIAL_STORE=plaintext` before running gws commands.\n\nCommon helpers (use `gws <service> --help` for full list):\n- *Gmail*: `gws gmail +triage` (inbox summary), `gws gmail +read <messageId>`, `gws gmail +send`\n- *Calendar*: `gws calendar events list --params '{\"calendarId\":\"primary\"}'`\n- *Drive*: `gws drive files list`, `gws drive +upload`, `gws drive +download`\n- *Sheets*: `gws sheets spreadsheets get --params '{\"spreadsheetId\":\"...\"}'`\n- *Docs*: `gws docs documents get --params '{\"documentId\":\"...\"}'`\n- *Slides*: `gws slides presentations get --params '{\"presentationId\":\"...\"}'`\n\nHelper commands use `+` prefix (e.g., `+triage`, `+read`, `+send`). API commands use resource paths (e.g., `events list`, `files list`). Use `--params '{...}'` for JSON parameters.\n\nExample:\n```\nGWS_CREDENTIAL_STORE=plaintext gws gmail +triage\nGWS_CREDENTIAL_STORE=plaintext gws calendar events list --params '{\"calendarId\":\"primary\"}'\n```",
+
+  "auth": {
+    "loginCommand": "gws auth login",
+    "postLogin": "mkdir -p ~/.nanoclaw/.gws-tokens && cp ~/.config/gws/credentials.json ~/.nanoclaw/.gws-tokens/ && cp ~/.config/gws/client_secret.json ~/.nanoclaw/.gws-tokens/ 2>/dev/null; true",
+    "description": "Opens browser for Google OAuth consent"
+  }
+}

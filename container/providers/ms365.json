@@ -1,0 +1,40 @@
+{
+  "id": "ms365",
+  "name": "Microsoft 365",
+  "description": "Outlook email, Calendar, Tasks, Planner via MCP tools",
+
+  "tokenPaths": {
+    "host": "~/.nanoclaw/.ms365-tokens",
+    "container": "/workspace/.ms365-tokens",
+    "readonly": false,
+    "requiredFile": ".token-cache.json"
+  },
+
+  "mcp": {
+    "command": "npx",
+    "args": [
+      "@softeria/ms-365-mcp-server",
+      "--toon",
+      "--enabled-tools",
+      "^(list-mail-(?!rule)|get-mail-(?!box)|create-mail-(?!rule)|delete-mail-(?!rule)|move-mail|update-mail-(?!rule)|add-mail|create-draft|list-calendar|get-calendar|create-calendar|update-calendar|delete-calendar|accept-calendar|decline-calendar|tentatively-accept|list-specific|get-specific|create-specific|update-specific|delete-specific|get-calendar-view|list-todo|get-todo|create-todo|update-todo|delete-todo|list-planner|get-planner|create-planner|update-planner|list-plan-tasks)"
+    ],
+    "env": {
+      "MS365_MCP_CLIENT_ID": "7556c30a-2955-4186-86cc-4ebc34809e4b",
+      "MS365_MCP_TENANT_ID": "0c9bf8f6-ccad-4b87-818d-49026938aa97",
+      "MS365_MCP_TOKEN_CACHE_PATH": "${tokenDir}/.token-cache.json",
+      "MS365_MCP_SELECTED_ACCOUNT_PATH": "${tokenDir}/.selected-account.json",
+      "SILENT": "1"
+    }
+  },
+
+  "allowedTools": ["mcp__ms365__*"],
+
+  "init": null,
+
+  "agentDocs": "## Microsoft 365 (Outlook, Calendar, Tasks)\n\nYou have MCP tools prefixed with `mcp__ms365__` for accessing the user's Microsoft 365 account. Use these when the user asks about email, calendar events, or tasks.\n\nAvailable capabilities:\n- *Email*: list, read, search, create drafts, move, delete messages and attachments. You cannot send, forward, or reply to emails.\n- *Calendar*: list, read, create, update, delete events. Accept/decline/tentatively accept invitations. View calendar availability.\n- *Tasks*: list, read, create, update, delete To Do tasks and Planner tasks.\n\nNot available: sending mail, mail rules, mailbox settings, files/OneDrive, contacts, Teams chat.",
+
+  "auth": {
+    "loginCommand": "MS365_MCP_CLIENT_ID=7556c30a-2955-4186-86cc-4ebc34809e4b MS365_MCP_TENANT_ID=0c9bf8f6-ccad-4b87-818d-49026938aa97 MS365_MCP_TOKEN_CACHE_PATH=$HOME/.nanoclaw/.ms365-tokens/.token-cache.json MS365_MCP_SELECTED_ACCOUNT_PATH=$HOME/.nanoclaw/.ms365-tokens/.selected-account.json npx @softeria/ms-365-mcp-server --login --enabled-tools '^(list-mail-(?!rule)|get-mail-(?!box)|create-mail-(?!rule)|delete-mail-(?!rule)|move-mail|update-mail-(?!rule)|add-mail|create-draft|list-calendar|get-calendar|create-calendar|update-calendar|delete-calendar|accept-calendar|decline-calendar|tentatively-accept|list-specific|get-specific|create-specific|update-specific|delete-specific|get-calendar-view|list-todo|get-todo|create-todo|update-todo|delete-todo|list-planner|get-planner|create-planner|update-planner|list-plan-tasks)'",
+    "description": "Opens browser for Microsoft OAuth consent"
+  }
+}

@@ -76,7 +76,9 @@ Run `/setup` inside the CLI. It handles everything: dependencies, container runt
 - **Container isolation** — Agents sandboxed in Docker or Apple Container. Only mounted directories accessible.
 - **Credential security** — Claude uses a credential proxy (containers see placeholders). Codex mounts subscription auth. Gemini uses API key injection. Secrets never exposed to agents.
 - **Agent teams** — Claude SDK supports multi-agent orchestration via TeamCreate/TeamDelete. Gemini ADK supports native sub-agents (SequentialAgent, ParallelAgent, LoopAgent). All runtimes support specialist delegation via MCP tool.
-- **Skills system** — Add capabilities with `/add-*` skills. Both SDKs load skills on-demand from their respective directories.
+- **Skills system** — Add capabilities with `/add-*` skills. All SDKs load skills on-demand from their respective directories.
+- **Provider plugins** — External services (MS365, Google Workspace, IMAP) configured as JSON files — add or remove a provider without code changes. Token mounts, MCP servers, allowed tools, and agent docs are all declared in the provider config.
+- **Email management** — Register email accounts (`/add-email-account`), calibrate sender rules (`/add-email-archive`), and batch-classify emails toward inbox zero (`/email-archive`). Provider-agnostic — works with Gmail, Outlook, and IMAP.
 
 ## Usage
 
@@ -244,6 +246,8 @@ Skills we'd like to see:
 
 - `/add-signal` — Signal as a channel
 - `/add-agentSDK-*` — Additional agent SDK adapters
+- IMAP MCP server — Enable IMAP email accounts (provider JSON ready at `container/providers/imap.json`)
+- `/add-email-triage` — Daily inbox management and action item tracking
 
 ## Requirements
 
@@ -272,6 +276,10 @@ Agents run in containers, not behind application-level permission checks. They c
 **Can I use a different development tool?**
 
 Yes. The project has persona files for all three: `CLAUDE.md` (Claude Code), `AGENTS.md` (Codex CLI), `GEMINI.md` (Gemini CLI). All generated from a shared `PROJECT.md`. Run `bash scripts/regenerate-persona.sh` after editing project context.
+
+**How do I add a new external service (email provider, API, etc.)?**
+
+Drop a JSON file in `container/providers/`. It declares token paths, MCP server config, allowed tools, init hooks, and agent docs. The system picks it up automatically — no code changes needed. See `container/providers/ms365.json` as an example.
 
 **How do I debug issues?**
 

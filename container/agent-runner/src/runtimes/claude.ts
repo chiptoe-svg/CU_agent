@@ -23,6 +23,7 @@ import {
   shouldClose,
   writeOutput,
 } from '../shared.js';
+import { getProviderAllowedTools, getProviderAgentDocs } from '../provider-registry.js';
 import { registerContainerRuntime, type QueryResult } from '../runtime-registry.js';
 
 // --- Claude SDK types ---
@@ -193,7 +194,7 @@ async function runClaudeQuery(
     fs.copyFileSync(groupAgentMd, groupClaudeMd);
   }
 
-  // Load global instructions
+  // Load global instructions + provider docs
   let globalClaudeMd: string | undefined;
   if (!containerInput.isMain) {
     for (const p of ['/workspace/global/AGENT.md', '/workspace/global/CLAUDE.md']) {
@@ -202,6 +203,11 @@ async function runClaudeQuery(
         break;
       }
     }
+  }
+  // Append provider-specific docs (MS365, GWS, etc.)
+  const providerDocs = getProviderAgentDocs();
+  if (providerDocs) {
+    globalClaudeMd = (globalClaudeMd || '') + '\n\n' + providerDocs;
   }
 
   const extraDirs: string[] = [];
@@ -227,7 +233,8 @@ async function runClaudeQuery(
         'Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep',
         'WebSearch', 'WebFetch', 'Task', 'TaskOutput', 'TaskStop',
         'TeamCreate', 'TeamDelete', 'SendMessage', 'TodoWrite',
-        'ToolSearch', 'Skill', 'NotebookEdit', 'mcp__nanoclaw__*', 'mcp__ms365__*',
+        'ToolSearch', 'Skill', 'NotebookEdit', 'mcp__nanoclaw__*',
+        ...getProviderAllowedTools(),
       ],
       env: sdkEnv,
       permissionMode: 'bypassPermissions',
