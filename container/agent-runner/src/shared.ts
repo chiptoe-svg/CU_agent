@@ -26,6 +26,7 @@ export interface ContainerInput {
   assistantName?: string;
   script?: string;
   runtime?: 'claude' | 'codex' | string;
+  runtimeOptions?: Record<string, unknown>;
   model?: string;
   baseUrl?: string;
 }
