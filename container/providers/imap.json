@@ -1,0 +1,25 @@
+{
+  "id": "imap",
+  "name": "IMAP Email",
+  "description": "Standard IMAP email access — iCloud, Yahoo, Fastmail, ProtonMail Bridge, university servers, self-hosted",
+
+  "tokenPaths": {
+    "host": "~/.nanoclaw/.imap-tokens",
+    "container": "/workspace/.imap-tokens",
+    "readonly": true,
+    "requiredFile": ".accounts.json"
+  },
+
+  "mcp": null,
+
+  "allowedTools": [],
+
+  "init": null,
+
+  "agentDocs": "## IMAP Email\n\nIMAP email accounts are registered but not yet operational. An IMAP MCP server or CLI tool needs to be added to the container. The `gws` (Gmail) and `ms365` (Outlook) providers are ready to use now.\n\nRegistered IMAP accounts and their connection details are in `/workspace/.imap-tokens/`.",
+
+  "auth": {
+    "loginCommand": "echo 'IMAP uses app passwords — no OAuth flow needed. Run /add-email-account to register an IMAP account.'",
+    "description": "IMAP accounts use app passwords configured via /add-email-account"
+  }
+}
