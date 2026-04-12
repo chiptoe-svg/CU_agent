@@ -66,7 +66,10 @@ export function loadProviders(): ProviderConfig[] {
         fs.readFileSync(filePath, 'utf-8'),
       );
       if (!config.id || !config.tokenPaths) {
-        logger.warn({ file }, 'Skipping invalid provider config (missing id or tokenPaths)');
+        logger.warn(
+          { file },
+          'Skipping invalid provider config (missing id or tokenPaths)',
+        );
         continue;
       }
       providers.push(config);

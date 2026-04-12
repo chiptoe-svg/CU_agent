@@ -19,6 +19,7 @@ import {
   shouldClose,
   writeOutput,
 } from '../shared.js';
+import { getProviderAgentDocs } from '../provider-registry.js';
 import { registerContainerRuntime, type QueryResult } from '../runtime-registry.js';
 
 // --- ADK server management ---
@@ -194,6 +195,19 @@ async function runGeminiQuery(
         } catch (err) {
           log(`Failed to symlink ${entry}: ${err instanceof Error ? err.message : String(err)}`);
         }
+      }
+    }
+  }
+
+  // Inject provider docs into AGENT.md so ADK agent sees them
+  const providerDocs = getProviderAgentDocs();
+  if (providerDocs) {
+    const agentMdPath = '/workspace/group/AGENT.md';
+    if (fs.existsSync(agentMdPath)) {
+      const existing = fs.readFileSync(agentMdPath, 'utf-8');
+      if (!existing.includes('<!-- provider-docs -->')) {
+        fs.appendFileSync(agentMdPath, `\n\n<!-- provider-docs -->\n${providerDocs}\n`);
+        log('Injected provider docs into AGENT.md for Gemini');
       }
     }
   }
