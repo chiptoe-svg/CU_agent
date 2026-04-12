@@ -564,9 +564,9 @@ async function startMessageLoop(): Promise<void> {
           const formatted = formatMessages(messagesToSend, TIMEZONE);
 
           if (queue.sendMessage(chatJid, formatted)) {
-            logger.debug(
+            logger.info(
               { chatJid, count: messagesToSend.length },
-              'Piped messages to active container',
+              'Piped messages to active container via IPC',
             );
             lastAgentTimestamp[chatJid] =
               messagesToSend[messagesToSend.length - 1].timestamp;
@@ -579,6 +579,10 @@ async function startMessageLoop(): Promise<void> {
               );
           } else {
             // No active container — enqueue for a new one
+            logger.info(
+              { chatJid, count: messagesToSend.length },
+              'No active container, enqueueing message check',
+            );
             queue.enqueueMessageCheck(chatJid);
           }
         }

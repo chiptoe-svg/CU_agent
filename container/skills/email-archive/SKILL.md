@@ -15,7 +15,21 @@ Parse the user's command:
 - `/email-archive review` → **Review mode**
 - `/email-archive recalibrate` → **Recalibrate mode**
 
-If this is a scheduled task (message starts with `[SCHEDULED TASK`), run in batch mode.
+If this is a scheduled task (message starts with `[SCHEDULED TASK`), run in batch mode directly.
+
+### Delegation — REQUIRED for batch mode
+
+**When invoked from a user message (not a scheduled task), ALWAYS delegate batch mode to a background task.** Do NOT run email processing inline — it blocks the main conversation for minutes.
+
+Instead:
+1. Acknowledge immediately: "Starting email archive batch in the background."
+2. Schedule a one-time immediate task using `schedule_task`:
+   - `schedule_type`: "once"
+   - `schedule_value`: 1 minute from now
+   - `prompt`: "/email-archive run"
+3. Return control to the user
+
+The scheduled task runs in its own container and sends results via `send_message` when done. Status and review modes are fast and CAN run inline.
 
 ## Setup Check
 
