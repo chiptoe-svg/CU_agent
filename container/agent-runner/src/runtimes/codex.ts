@@ -38,6 +38,20 @@ async function runCodexQuery(
   mcpServerPath: string,
   containerInput: ContainerInput,
 ): Promise<QueryResult> {
+  const runtimeOptions = containerInput.runtimeOptions || {};
+  const modelRef =
+    typeof runtimeOptions.modelRef === 'string'
+      ? runtimeOptions.modelRef
+      : typeof runtimeOptions.model === 'string'
+        ? runtimeOptions.model
+        : containerInput.model || 'gpt-5.4-mini';
+  const baseUrl =
+    typeof runtimeOptions.baseUrl === 'string'
+      ? runtimeOptions.baseUrl
+      : containerInput.baseUrl || process.env.OPENAI_BASE_URL;
+  const sandboxProfile =
+    runtimeOptions.sandboxProfile === 'operator' ? 'operator' : 'safe';
+
   // Assemble AGENTS.md from global + group AGENT.md files
   const agentsParts: string[] = [];
   for (const dir of ['/workspace/global', '/workspace/group']) {
@@ -96,7 +110,7 @@ NANOCLAW_CHAT_JID = "${containerInput.chatJid}"
 NANOCLAW_GROUP_FOLDER = "${containerInput.groupFolder}"
 NANOCLAW_IS_MAIN = "${containerInput.isMain ? '1' : '0'}"
 NANOCLAW_RUNTIME = "codex"
-NANOCLAW_MODEL = "${containerInput.model || 'gpt-5.4-mini'}"
+NANOCLAW_MODEL = "${modelRef}"
 `;
     fs.writeFileSync(configTomlPath, existingConfig + mcpConfig);
     log('Wrote NanoClaw MCP config to Codex config.toml');
@@ -135,7 +149,7 @@ NANOCLAW_MODEL = "${containerInput.model || 'gpt-5.4-mini'}"
 
   const codex = new Codex({
     apiKey: process.env.OPENAI_API_KEY,
-    baseUrl: containerInput.baseUrl || process.env.OPENAI_BASE_URL,
+    baseUrl,
     config: {
       // Disable bwrap sandbox — container is already sandboxed by Docker
       features: { use_linux_sandbox_bwrap: false },
@@ -144,7 +158,7 @@ NANOCLAW_MODEL = "${containerInput.model || 'gpt-5.4-mini'}"
   });
 
   const threadOptions = {
-    model: containerInput.model || 'gpt-5.4-mini',
+    model: modelRef,
     workingDirectory: '/workspace/group',
     sandboxMode: 'danger-full-access' as const,
     networkAccessEnabled: true,
@@ -152,6 +166,9 @@ NANOCLAW_MODEL = "${containerInput.model || 'gpt-5.4-mini'}"
     skipGitRepoCheck: true,
     additionalDirectories: extraDirs.length > 0 ? extraDirs : undefined,
   };
+  log(`Codex sandbox profile: ${sandboxProfile}`);
+  // TODO: Enforce safe/operator at the container launch boundary instead of
+  // only carrying the profile through runtimeOptions into the runner.
 
   // Try resuming a previous thread if we have a session ID.
   // Fall back to a fresh thread if resume fails (e.g. "no rollout found").

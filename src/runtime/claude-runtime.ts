@@ -44,7 +44,9 @@ export class ClaudeRuntime implements AgentRuntime {
         assistantName: config.assistantName,
         script: config.script,
         runtime: 'claude',
-        model: config.group.containerConfig?.model,
+        runtimeOptions: config.group.containerConfig?.model
+          ? { model: config.group.containerConfig.model }
+          : undefined,
       },
       onProcess: (proc, containerName) =>
         config.onProcess(proc, containerName, config.group.folder),

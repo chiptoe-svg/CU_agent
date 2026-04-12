@@ -8,14 +8,23 @@
  * Both runtimes share the same container image, MCP server, IPC protocol,
  * and output format. The only difference is which SDK drives the agent loop.
  */
-import { DEFAULT_MODEL } from '../config.js';
+import path from 'path';
 
+import { DATA_DIR } from '../config.js';
+import { validateProviderAuth } from '../auth/backends.js';
+import { logger } from '../logger.js';
+import {
+  resolveCodexRuntimeOptions,
+  type CodexResolvedOptions,
+} from './codex-policy.js';
 import type {
   AgentEvent,
   AgentRuntime,
   AgentRuntimeConfig,
   ContainerManager,
   ContainerOutput,
+  RuntimeCapabilities,
+  RuntimePreflightResult,
   RuntimeId,
 } from './types.js';
 import { registerAgentSdk } from './registry.js';
@@ -26,14 +35,95 @@ export class CodexRuntime implements AgentRuntime {
   private containerManager: ContainerManager | null = null;
   private groupFolder: string | null = null;
 
+  private toRuntimeOptions(
+    options: CodexResolvedOptions,
+  ): Record<string, unknown> {
+    return {
+      modelRef: options.modelRef,
+      sandboxProfile: options.sandboxProfile,
+      ...(options.baseUrl ? { baseUrl: options.baseUrl } : {}),
+    };
+  }
+
+  capabilities(): RuntimeCapabilities {
+    return {
+      supportsResume: true,
+      supportsToolStreaming: true,
+      supportsSkills: true,
+      supportsProjectInstructions: true,
+      supportsScheduledTasks: true,
+      supportsDelegation: 'manual',
+    };
+  }
+
+  async preflight(
+    config: AgentRuntimeConfig,
+  ): Promise<RuntimePreflightResult> {
+    const resolvedOptions = resolveCodexRuntimeOptions(
+      config.group,
+      config.runtimeOptions,
+    );
+    const runtimeOptions = this.toRuntimeOptions(resolvedOptions);
+    const warnings: string[] = [];
+
+    if (config.runtimeOptions?.model && config.runtimeOptions?.modelRef) {
+      warnings.push('Codex runtimeOptions received both model and modelRef; modelRef wins.');
+    }
+
+    if (
+      config.runtimeOptions?.sandboxProfile &&
+      config.runtimeOptions.sandboxProfile !== 'safe' &&
+      config.runtimeOptions.sandboxProfile !== 'operator'
+    ) {
+      warnings.push('Unknown codex sandboxProfile; defaulting to safe.');
+    }
+
+    const authValidation = await validateProviderAuth({
+      group: config.group,
+      runtime: this.id,
+      groupSessionsBase: path.join(DATA_DIR, 'sessions', config.group.folder),
+      projectRoot: process.cwd(),
+      runtimeOptions,
+    });
+
+    if (authValidation.warnings) warnings.push(...authValidation.warnings);
+
+    return {
+      ok: authValidation.ok,
+      resolved: runtimeOptions,
+      warnings: warnings.length > 0 ? warnings : undefined,
+      errors: authValidation.errors,
+    };
+  }
+
   async *run(
     prompt: string,
     config: AgentRuntimeConfig,
   ): AsyncGenerator<AgentEvent> {
     this.containerManager = config.containerManager;
     this.groupFolder = config.group.folder;
+    const preflight = await this.preflight(config);
+    const resolvedOptions = resolveCodexRuntimeOptions(
+      config.group,
+      preflight.resolved || config.runtimeOptions,
+    );
+    const runtimeOptions = this.toRuntimeOptions(resolvedOptions);
 
-    const model = config.group.containerConfig?.model || DEFAULT_MODEL;
+    if (preflight.warnings) {
+      for (const warning of preflight.warnings) {
+        logger.warn({ group: config.group.name, runtime: this.id }, warning);
+      }
+    }
+
+    if (!preflight.ok) {
+      yield {
+        type: 'error',
+        runtime: this.id,
+        error: preflight.errors?.join(' ') || 'Codex runtime preflight failed.',
+        sessionId: config.sessionId,
+      };
+      return;
+    }
 
     const output = await config.containerManager.runAgentSession({
       group: config.group,
@@ -47,8 +137,7 @@ export class CodexRuntime implements AgentRuntime {
         assistantName: config.assistantName,
         script: config.script,
         runtime: 'codex',
-        model,
-        baseUrl: config.group.containerConfig?.baseUrl,
+        runtimeOptions,
       },
       onProcess: (proc, containerName) =>
         config.onProcess(proc, containerName, config.group.folder),

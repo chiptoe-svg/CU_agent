@@ -156,13 +156,15 @@ describe('runtime-setup', () => {
       const mount = setup.prepareHome(makeCtx({ runtime: 'codex' }));
 
       expect(mount.containerPath).toBe('/home/node/.codex');
-      expect(fsMock.copyFileSync).toHaveBeenCalledWith(
-        expect.stringContaining('auth.json'),
-        expect.stringContaining('auth.json'),
+      expect(fsMock.writeFileSync).toHaveBeenCalledWith(
+        expect.stringContaining('/data/sessions/test-group/.codex/auth.json'),
+        expect.any(String),
+        expect.objectContaining({ mode: 0o600 }),
       );
-      expect(fsMock.copyFileSync).toHaveBeenCalledWith(
-        expect.stringContaining('config.toml'),
-        expect.stringContaining('config.toml'),
+      expect(fsMock.writeFileSync).toHaveBeenCalledWith(
+        expect.stringContaining('/data/sessions/test-group/.codex/config.toml'),
+        expect.any(String),
+        expect.objectContaining({ mode: 0o600 }),
       );
     });
 
@@ -172,9 +174,11 @@ describe('runtime-setup', () => {
 
       const mount = setup.prepareHome(makeCtx({ runtime: 'codex' }));
 
-      expect(mount.hostPath).toBe('/data/sessions/test-group/home');
-      expect(mount.containerPath).toBe('/home/node');
-      expect(fsMock.copyFileSync).not.toHaveBeenCalled();
+      expect(mount.hostPath).toBe('/data/sessions/test-group/.codex');
+      expect(mount.containerPath).toBe('/home/node/.codex');
+      const codexWrites = fsMock.writeFileSync.mock.calls
+        .filter((args) => String(args[0]).includes('/data/sessions/test-group/.codex/'));
+      expect(codexWrites).toHaveLength(0);
     });
 
     it('getCredentialEnv injects API key when no subscription auth', () => {

@@ -42,8 +42,12 @@ export class GeminiRuntime implements AgentRuntime {
         assistantName: config.assistantName,
         script: config.script,
         runtime: 'gemini',
-        model,
-        baseUrl: config.group.containerConfig?.baseUrl,
+        runtimeOptions: {
+          model,
+          ...(config.group.containerConfig?.baseUrl
+            ? { baseUrl: config.group.containerConfig.baseUrl }
+            : {}),
+        },
       },
       onProcess: (proc, containerName) =>
         config.onProcess(proc, containerName, config.group.folder),

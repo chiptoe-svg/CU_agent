@@ -101,30 +101,117 @@ Telegram commands:
 
 ## Architecture
 
-```
-Channels → SQLite → Polling loop → AgentRuntime → Container (SDK agent loop) → Response
-                                        ↓
-                              SDK Registry selects:
-                              • ClaudeRuntime  → Claude Agent SDK query()
-                              • CodexRuntime   → Codex SDK thread.runStreamed()
-                              • GeminiRuntime  → Google ADK (FastAPI sidecar)
-```
+NanoClaw FlexAgents is organized as four layers. The goal is to keep the app shell provider-neutral, push provider-specific behavior into runtime modules, and keep the in-container SDK loops isolated from the host process.
 
-Single Node.js process. Agent SDKs self-register via a modular registry (same pattern as channels). All SDKs share one container image — the agent-runner detects the runtime from config and dispatches to the appropriate SDK module. Per-group message queue with concurrency control. IPC via filesystem.
+### Layer 1: App Shell
 
-Key files:
-- `src/index.ts` — Orchestrator: state, message loop, runtime invocation
-- `src/runtime/registry.ts` — SDK self-registration registry
-- `src/runtime/claude-runtime.ts` — Claude adapter
-- `src/runtime/codex-runtime.ts` — Codex adapter
-- `src/runtime/gemini-runtime.ts` — Gemini adapter
-- `src/container-runner.ts` — Container spawning, mounts, credential injection
-- `src/provider-registry.ts` — Provider plugin loader (token mounts, MCP servers, tools)
-- `src/channels/registry.ts` — Channel registry
-- `container/providers/` — Provider JSON configs (ms365, gws, imap)
-- `container/agent-runner/src/runtimes/` — SDK-specific agent loops
-- `container/agent-runner/src/provider-registry.ts` — Container-side provider dispatch
-- `groups/*/AGENT.md` — Per-group agent persona (runtime-agnostic)
+The app shell is the long-running Node.js process. It owns channels, SQLite, scheduling, message routing, per-group queues, and container lifecycle orchestration.
+
+Flow at this layer:
+
+1. A channel receives a message or scheduled task fires.
+2. The app shell loads the group config and decides which runtime to use.
+3. The selected runtime adapter gets a neutral `AgentRuntimeConfig`.
+4. Results stream back through the queue and are sent to the channel.
+
+Core files:
+- `src/index.ts` — main orchestrator and message loop
+- `src/channels/*` — channel adapters
+- `src/task-scheduler.ts` — scheduled task execution
+- `src/group-queue.ts` — per-group serialization and process tracking
+
+### Layer 2: Runtime Boundary
+
+This layer is the host-side abstraction over provider SDKs. The shared boundary is intentionally generic:
+
+- `AgentRuntime` exposes `run()`, optional `preflight()`, and optional `capabilities()`
+- `ContainerInput` carries neutral fields plus `runtimeOptions`
+- provider-specific normalization happens inside the runtime, not in the app shell
+
+This is where each runtime can:
+
+- resolve provider-specific options from group config
+- validate auth before launch
+- declare capabilities honestly, such as resume support or manual delegation
+
+Core files:
+- `src/runtime/types.ts` — neutral runtime interfaces
+- `src/runtime/registry.ts` — runtime self-registration
+- `src/runtime/claude-runtime.ts` — Claude host adapter
+- `src/runtime/codex-runtime.ts` — Codex host adapter
+- `src/runtime/gemini-runtime.ts` — Gemini host adapter
+- `src/runtime/codex-policy.ts` — Codex-specific option resolution
+
+### Layer 3: Runtime Setup and Container Launch
+
+This layer prepares the container environment without teaching the app shell about a specific provider’s credential format.
+
+Responsibilities:
+
+- choose the runtime-specific home layout
+- sync skills into the per-group runtime home
+- resolve auth material through provider-neutral auth backends
+- mount the group workspace, IPC directory, and runtime home into the container
+
+The important distinction is:
+
+- the framework knows how to prepare a runtime home and launch a container
+- only a runtime or auth backend knows what credentials/options its provider needs
+
+Core files:
+- `src/container-runner.ts` — container spawning, mounts, env injection
+- `src/runtime-setup.ts` — runtime home preparation
+- `src/provider-registry.ts` — provider plugin loader (token mounts, MCP servers, tools)
+- `src/auth/types.ts` — neutral auth backend contracts
+- `src/auth/backends.ts` — compatibility env/file backends plus future stubs
+- `container/providers/` — provider JSON configs (ms365, gws, imap)
+
+### Layer 4: In-Container Agent Runner
+
+Inside the container, a shared agent-runner process dispatches to the correct SDK module. All runtimes share the same container image, IPC protocol, and basic filesystem layout, but each runtime module owns its own SDK semantics.
+
+Flow at this layer:
+
+1. The container agent-runner reads `ContainerInput`.
+2. The runtime registry selects the in-container runtime implementation.
+3. The runtime module talks to its SDK, streams output, and writes structured results back over stdout/IPC.
+
+Core files:
+- `container/agent-runner/src/index.ts` — shared container entrypoint
+- `container/agent-runner/src/runtime-registry.ts` — in-container dispatch
+- `container/agent-runner/src/shared.ts` — shared IPC/output plumbing
+- `container/agent-runner/src/runtimes/claude.ts` — Claude SDK loop
+- `container/agent-runner/src/runtimes/codex.ts` — Codex SDK loop
+- `container/agent-runner/src/runtimes/gemini.ts` — Gemini ADK loop
+- `container/agent-runner/src/provider-registry.ts` — container-side provider dispatch (MCP, tools, init hooks)
+
+### Personas, Skills, and Group Isolation
+
+Each group is isolated by folder, persona, memory, IPC namespace, and runtime home.
+
+- `groups/*/AGENT.md` — runtime-agnostic persona
+- `groups/*/memory/` — persistent memory and notes
+- `container/skills/` — shared skill source copied into runtime-specific homes
+
+At startup or launch time, the system assembles the provider-specific instruction file a runtime expects:
+
+- Codex reads `AGENTS.md`
+- Claude reads `CLAUDE.md`
+- Gemini reads `GEMINI.md`
+
+### End-to-End Flow
+
+```text
+Channel / Scheduler
+  -> App Shell (routing, queueing, state)
+  -> AgentRuntime (provider-neutral host adapter)
+  -> Runtime Setup + Container Runner
+  -> Container Agent Runner
+  -> Provider SDK loop
+  -> Structured output / IPC
+  -> App Shell
+  -> Channel response
+```
 
 ## Philosophy
 
@@ -132,7 +219,7 @@ Key files:
 
 **Secure by isolation.** Agents run in Linux containers and can only see what's explicitly mounted.
 
-**Runtime-agnostic.** The base system has no SDK-specific code. Agent SDKs are installed as modular skills.
+**Runtime-agnostic at the core.** The app shell stays provider-neutral, while SDK-specific behavior lives in runtime and container modules.
 
 **Built for the individual.** Fork it, customize it, make it yours. The codebase is small enough to modify safely.
 

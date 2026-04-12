@@ -27,8 +27,7 @@ export interface ContainerInput {
   assistantName?: string;
   script?: string;
   runtime?: 'claude' | 'codex' | string;
-  model?: string;
-  baseUrl?: string;
+  runtimeOptions?: Record<string, unknown>;
 }
 
 export interface ContainerOutput {
@@ -93,6 +92,10 @@ export interface AgentRuntime {
 
   run(prompt: string, config: AgentRuntimeConfig): AsyncGenerator<AgentEvent>;
 
+  preflight?(config: AgentRuntimeConfig): Promise<RuntimePreflightResult>;
+
+  capabilities?(): RuntimeCapabilities;
+
   /** Send a follow-up message into an active run. */
   sendFollowUp(text: string): boolean;
 
@@ -103,6 +106,22 @@ export interface AgentRuntime {
   shouldClearSession?(error: string): boolean;
 }
 
+export interface RuntimePreflightResult {
+  ok: boolean;
+  resolved?: Record<string, unknown>;
+  warnings?: string[];
+  errors?: string[];
+}
+
+export interface RuntimeCapabilities {
+  supportsResume: boolean;
+  supportsToolStreaming: boolean;
+  supportsSkills: boolean;
+  supportsProjectInstructions: boolean;
+  supportsScheduledTasks: boolean;
+  supportsDelegation: 'none' | 'manual' | 'automatic';
+}
+
 export interface AgentRuntimeConfig {
   group: RegisteredGroup;
   chatJid: string;
@@ -111,6 +130,7 @@ export interface AgentRuntimeConfig {
   sessionId?: string;
   isScheduledTask?: boolean;
   script?: string;
+  runtimeOptions?: Record<string, unknown>;
   containerManager: ContainerManager;
   /** Callback to register the container process with the group queue */
   onProcess: (
