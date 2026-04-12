@@ -76,7 +76,11 @@ function copyIfExists(src: string, dst: string): void {
 
 const claudeSetup: RuntimeSetup = {
   prepareHome(ctx) {
-    const { homeDir, mount } = prepareHomeDir(ctx, '.claude', '/home/node/.claude');
+    const { homeDir, mount } = prepareHomeDir(
+      ctx,
+      '.claude',
+      '/home/node/.claude',
+    );
 
     // SDK settings — only written once (not overwritten on restart)
     const settingsFile = path.join(homeDir, 'settings.json');
@@ -126,11 +130,21 @@ const codexSetup: RuntimeSetup = {
       return { hostPath: homeDir, containerPath: '/home/node' };
     }
 
-    const { homeDir, mount } = prepareHomeDir(ctx, '.codex', '/home/node/.codex');
+    const { homeDir, mount } = prepareHomeDir(
+      ctx,
+      '.codex',
+      '/home/node/.codex',
+    );
 
     // Copy subscription credentials + config from host
-    copyIfExists(path.join(hostCodexDir, 'auth.json'), path.join(homeDir, 'auth.json'));
-    copyIfExists(path.join(hostCodexDir, 'config.toml'), path.join(homeDir, 'config.toml'));
+    copyIfExists(
+      path.join(hostCodexDir, 'auth.json'),
+      path.join(homeDir, 'auth.json'),
+    );
+    copyIfExists(
+      path.join(hostCodexDir, 'config.toml'),
+      path.join(homeDir, 'config.toml'),
+    );
 
     return mount;
   },
@@ -139,14 +153,20 @@ const codexSetup: RuntimeSetup = {
     const env: Record<string, string> = {};
 
     // API key fallback when no subscription auth
-    const hostAuth = path.join(process.env.HOME || '/home/node', '.codex', 'auth.json');
+    const hostAuth = path.join(
+      process.env.HOME || '/home/node',
+      '.codex',
+      'auth.json',
+    );
     if (!fs.existsSync(hostAuth)) {
       const secrets = readEnvFile(['OPENAI_API_KEY']);
       if (secrets.OPENAI_API_KEY) env.OPENAI_API_KEY = secrets.OPENAI_API_KEY;
     }
 
     // Custom base URL: per-group > global .env
-    const baseUrl = ctx.group.containerConfig?.baseUrl || readEnvFile(['OPENAI_BASE_URL']).OPENAI_BASE_URL;
+    const baseUrl =
+      ctx.group.containerConfig?.baseUrl ||
+      readEnvFile(['OPENAI_BASE_URL']).OPENAI_BASE_URL;
     if (baseUrl) env.OPENAI_BASE_URL = baseUrl;
 
     return env;
@@ -207,4 +227,10 @@ export function getRuntimeSetup(runtime: string): RuntimeSetup {
 }
 
 /** Visible for testing. */
-export const _testing = { RUNTIME_SETUP, fallbackSetup, syncSkills, prepareHomeDir, copyIfExists };
+export const _testing = {
+  RUNTIME_SETUP,
+  fallbackSetup,
+  syncSkills,
+  prepareHomeDir,
+  copyIfExists,
+};

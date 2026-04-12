@@ -17,27 +17,25 @@ const WHISPER_MODEL =
  * Converts to 16kHz mono WAV first via ffmpeg, then runs whisper-cli.
  * Returns the transcript text, or null on failure.
  */
-export async function transcribeAudio(audioPath: string): Promise<string | null> {
+export async function transcribeAudio(
+  audioPath: string,
+): Promise<string | null> {
   const wavPath = audioPath.replace(/\.[^.]+$/, '.wav');
 
   try {
     // Convert to 16kHz mono WAV (whisper.cpp requirement)
-    await execFileAsync('ffmpeg', [
-      '-i', audioPath,
-      '-ar', '16000',
-      '-ac', '1',
-      '-f', 'wav',
-      '-y',
-      wavPath,
-    ], { timeout: 30_000 });
+    await execFileAsync(
+      'ffmpeg',
+      ['-i', audioPath, '-ar', '16000', '-ac', '1', '-f', 'wav', '-y', wavPath],
+      { timeout: 30_000 },
+    );
 
     // Run whisper-cli
-    const { stdout } = await execFileAsync(WHISPER_BIN, [
-      '-m', WHISPER_MODEL,
-      '-f', wavPath,
-      '--no-timestamps',
-      '-nt',
-    ], { timeout: 60_000 });
+    const { stdout } = await execFileAsync(
+      WHISPER_BIN,
+      ['-m', WHISPER_MODEL, '-f', wavPath, '--no-timestamps', '-nt'],
+      { timeout: 60_000 },
+    );
 
     const transcript = stdout.trim();
     if (!transcript) {
@@ -57,6 +55,8 @@ export async function transcribeAudio(audioPath: string): Promise<string | null>
     // Clean up the intermediate WAV file
     try {
       if (fs.existsSync(wavPath)) fs.unlinkSync(wavPath);
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 }
