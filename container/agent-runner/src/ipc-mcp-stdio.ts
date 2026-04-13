@@ -503,52 +503,6 @@ Use available_groups.json to find the JID for a group. The folder name must be c
   },
 );
 
-// --- Specialist subagent tools ---
-
-import { runSpecialist, listSpecialists } from './specialist-runner.js';
-
-// Runtime and model are set by the main agent runner via environment
-const currentRuntime = process.env.NANOCLAW_RUNTIME || 'claude';
-const currentModel = process.env.NANOCLAW_MODEL || '';
-
-server.tool(
-  'run_specialist',
-  `Delegate a task to a specialist subagent. The specialist runs as an independent agent with its own persona and tools, then returns its result to you.
-
-Use this when a task requires deep expertise in a specific area. Available specialists are defined in your AGENT.md (## Specialists section) or as files in specialists/.
-
-The specialist has access to the same workspace and tools but runs with a focused persona. It does NOT have access to your conversation history — include all relevant context in the task description.
-
-Note: If you have TeamCreate/SendMessage available (Claude runtime), prefer those for richer multi-turn collaboration. Use this tool for quick single-turn specialist queries.`,
-  {
-    specialist: z.string().describe('Name of the specialist (e.g., "analyst", "writer", "researcher")'),
-    task: z.string().describe('What the specialist should do. Include all necessary context — the specialist cannot see your conversation.'),
-  },
-  async (args) => {
-    const result = await runSpecialist(args.specialist, args.task, currentRuntime, currentModel);
-    return {
-      content: [{ type: 'text' as const, text: result }],
-    };
-  },
-);
-
-server.tool(
-  'list_specialists',
-  'List available specialist subagents. Shows specialists defined in AGENT.md and as files in specialists/.',
-  {},
-  async () => {
-    const specialists = listSpecialists();
-    if (specialists.length === 0) {
-      return {
-        content: [{ type: 'text' as const, text: 'No specialists defined. Add specialist definitions under ## Specialists in AGENT.md, or create files in specialists/.' }],
-      };
-    }
-    return {
-      content: [{ type: 'text' as const, text: `Available specialists: ${specialists.join(', ')}` }],
-    };
-  },
-);
-
 // --- File operation tools ---
 // These provide Claude-like file tools (Read, Write, Edit, Glob, Grep) as MCP tools.
 // Codex SDK only has bash — these eliminate API round-trips for file operations.

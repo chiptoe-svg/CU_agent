@@ -49,6 +49,8 @@ export interface ContainerInput {
   assistantName?: string;
   script?: string;
   runtime?: 'claude' | 'codex' | string;
+  runtimeOptions?: Record<string, unknown>;
+  // Legacy compatibility fields kept while older call sites and tools migrate.
   model?: string;
   baseUrl?: string;
 }
@@ -242,6 +244,7 @@ function buildContainerArgs(
   image: string,
   group: RegisteredGroup,
   runtime?: string,
+  runtimeOptions?: Record<string, unknown>,
 ): string[] {
   const args: string[] = ['run', '-i', '--rm', '--name', containerName];
 
@@ -255,6 +258,7 @@ function buildContainerArgs(
     runtime: runtime || '',
     groupSessionsBase: path.join(DATA_DIR, 'sessions', group.folder),
     projectRoot: process.cwd(),
+    runtimeOptions,
   });
   for (const [key, value] of Object.entries(credEnv)) {
     args.push('-e', `${key}=${value}`);
@@ -314,6 +318,7 @@ export async function runContainerAgent(
     image,
     group,
     runtime,
+    input.runtimeOptions,
   );
 
   logger.debug(

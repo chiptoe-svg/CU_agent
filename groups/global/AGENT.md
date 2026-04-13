@@ -103,6 +103,18 @@ When NOT to delegate:
 - Scheduled task → confirm the schedule and what it will do
 - Multi-step task → list what was done in brief bullet points
 
+## Delegation
+
+You can delegate tasks to subagents for parallel work or specialist expertise. Use the tools available in your runtime:
+
+- **Native subagents** (preferred): Use `spawnAgent` to create a subagent with a focused task, `sendInput` to communicate, `wait` for results, `closeAgent` when done. Each subagent runs independently with its own context.
+- **MCP fallback**: Use `run_specialist` for single-turn specialist queries if native tools aren't available.
+
+When delegating:
+- Include all relevant context — subagents cannot see your conversation
+- Review the subagent's output before presenting it to the user
+- For specialist personas, read `/workspace/global/AGENT-reference.md`
+
 ## Reference
 
-For task scripting, specialist delegation, and other operational details, read `/workspace/global/AGENT-reference.md`.
+For task scripting, specialist personas, and other operational details, read `/workspace/global/AGENT-reference.md`.
