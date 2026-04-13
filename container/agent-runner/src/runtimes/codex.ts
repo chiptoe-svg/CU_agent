@@ -51,11 +51,16 @@ function saveCompactState(state: CompactState): void {
 const CODEX_TOOL_GUIDANCE = `
 ## File and Shell Best Practices
 
-When reading files, always use \`cat -n\` to show line numbers.
-When searching file contents, use \`grep -rn\` to include line numbers and context.
-For large files, read specific line ranges: \`sed -n '10,30p' file.txt\`
-When listing files, use \`find\` with specific patterns rather than \`ls -R\`.
-For file editing, prefer \`apply_patch\` over rewriting entire files.
+**IMPORTANT: Use MCP file tools instead of bash for file operations.** They are faster (no shell overhead) and return cleaner output.
+
+- **Reading files:** Use \`mcp__nanoclaw__file_read\` (not cat/head/tail/sed)
+- **Writing files:** Use \`mcp__nanoclaw__file_write\` (not echo/cat heredoc)
+- **Editing files:** Use \`mcp__nanoclaw__file_edit\` (not sed/awk)
+- **Finding files:** Use \`mcp__nanoclaw__file_glob\` (not find/ls)
+- **Searching content:** Use \`mcp__nanoclaw__file_grep\` (not grep/rg)
+- **Running commands:** Use bash only for system commands, git, and tools that aren't file operations
+
+These MCP tools execute locally with no shell overhead. Each bash tool call requires a full API round-trip — MCP tools are significantly faster.
 `;
 
 // --- Codex query ---
