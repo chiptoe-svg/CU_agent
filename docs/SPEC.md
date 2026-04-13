@@ -41,8 +41,8 @@ Multi-runtime personal assistant based on upstream NanoClaw. The host app manage
 ├──────────────────────────────────────────────────────────────────────┤
 │ Shared agent-runner                                                   │
 │   ├─ Claude runtime  -> Claude Agent SDK                              │
-│   ├─ Codex runtime   -> OpenAI Codex SDK                              │
-│   └─ Gemini runtime  -> Google ADK (Python sidecar)                    │
+│   ├─ Codex runtime   -> codex app-server (JSON-RPC over stdio)        │
+│   └─ Gemini runtime  -> Google ADK (Python sidecar)                   │
 │                                                                      │
 │ Mounted group workspace + per-group runtime home + IPC + extras      │
 │ MCP bridge exposes NanoClaw tools back to the host via filesystem    │
@@ -147,11 +147,12 @@ The shared runner:
 
 #### Codex runtime
 
-- Uses `@openai/codex-sdk`
-- Synthesizes `AGENTS.md` from global and group agent files
+- Uses `codex app-server` over JSON-RPC stdio
+- Synthesizes `AGENTS.md` from global and group agent files, then passes it as `baseInstructions`
 - Writes NanoClaw MCP config into `.codex/config.toml`
 - Archives conversations with tool-call context
 - Supports custom `baseUrl` for OpenAI-compatible endpoints
+- Supports worker-thread style delegation through Codex-native tools rather than a framework-owned shared-session abstraction
 
 #### Gemini runtime
 
@@ -236,13 +237,15 @@ Registered groups map a chat JID to:
 - main-group status
 - optional `containerConfig`
 
-`containerConfig` is where runtime-specific behavior lives:
+`containerConfig` is where runtime selection and common compatibility settings live:
 
 - `runtime`
 - `model`
 - `baseUrl`
 - `timeout`
 - `additionalMounts`
+
+At the runtime boundary, runtimes translate provider-specific fields into neutral `runtimeOptions` before crossing into the shared container interface.
 
 ---
 

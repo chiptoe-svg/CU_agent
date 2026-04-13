@@ -20,7 +20,7 @@
 
 [NanoClaw](https://github.com/qwibitai/nanoclaw) is a brilliant piece of software — a personal AI assistant that's small enough to understand, secure by design, and built to be customized. But it's built entirely on the Claude Agent SDK, which means you need an Anthropic subscription, you can't use local models for privacy-sensitive work, and you're locked to one provider.
 
-FlexAgents keeps NanoClaw's philosophy — one process, a handful of files, skills over features — but abstracts the agent SDK into a modular layer. You choose which SDK to install during setup, the same way you choose which messaging channels to add. The base system has no SDK-specific code at all.
+FlexAgents keeps NanoClaw's philosophy — one process, a handful of files, skills over features — but moves SDK-specific behavior behind a runtime boundary. The app shell stays provider-neutral, while runtime and container modules own the Claude, Codex, and Gemini specifics.
 
 Three agent SDKs are supported:
 
@@ -90,7 +90,7 @@ You can run one SDK or all three simultaneously — different groups can use dif
 <tr>
   <td><b>Multi-agent</b></td>
   <td>Agent teams — TeamCreate / SendMessage. Shared context.</td>
-  <td>Host-level via IPC + scheduled tasks</td>
+  <td>App-server worker threads and native delegation tools (runtime-specific, manual capability)</td>
   <td>Subagent tools + A2A protocol + remote invocation</td>
 </tr>
 <tr>
@@ -169,10 +169,10 @@ Run `/setup` inside the CLI. It handles everything: dependencies, container runt
 - **Scheduled tasks** — Recurring jobs with optional pre-check scripts to minimize API usage.
 - **Web access** — Search and fetch content from the web.
 - **Container isolation** — Agents sandboxed in Docker or Apple Container. Only mounted directories accessible.
-- **Credential security** — Claude uses a credential proxy (containers see placeholders). Codex mounts subscription auth. Gemini uses API key injection. Secrets never exposed to agents.
-- **Agent teams** — Claude SDK supports multi-agent orchestration via TeamCreate/TeamDelete. Gemini ADK supports native sub-agents (SequentialAgent, ParallelAgent, LoopAgent). All runtimes support specialist delegation via MCP tool.
+- **Credential security** — Claude uses a credential proxy. Codex uses a provider-neutral auth backend that can materialize runtime-home files or env vars. Gemini uses API key injection. Secrets stay scoped by the host launcher and runtime setup.
+- **Delegation** — Claude supports native team orchestration, Gemini ADK supports native sub-agents, and Codex uses app-server worker-thread delegation. These are exposed honestly as runtime-specific capabilities, not forced into one fake shared abstraction.
 - **Skills system** — Add capabilities with `/add-*` skills. All SDKs load skills on-demand from their respective directories.
-- **Provider plugins** — External services (MS365, Google Workspace, IMAP) described as JSON config files — add or remove a provider without code changes. Token mounts, MCP servers, allowed tools, and agent docs are all declared in the config. Providers are definitions only — run `/add-email-account` to authenticate and activate.
+- **Provider plugins** — External services (MS365, Google Workspace, IMAP) are described as JSON config files — add or remove a provider without code changes. Token paths, MCP servers, allowed tools, and init hooks are declared in config, while the host still decides which containers may receive provider tokens. Providers are definitions only — run `/add-email-account` to authenticate and activate.
 - **Email management** — Register email accounts (`/add-email-account`), calibrate sender rules (`/add-email-archive`), and batch-classify emails toward inbox zero (`/email-archive`). Provider-agnostic — works with any configured email account.
 
 ## Usage
@@ -256,7 +256,7 @@ The important distinction is:
 - only a runtime or auth backend knows what credentials/options its provider needs
 - provider definitions are data-driven JSON files, but credential exposure is still controlled by the host launcher
 
-Codex has one extra wrinkle: it may use an inner sandbox based on user namespaces and bubblewrap inside the container. Because of that, the host launcher applies a small Codex-only container compatibility adjustment when needed. Claude and Gemini rely only on the outer container sandbox and do not receive the same relaxation.
+Codex runs inside the same outer container boundary as Claude and Gemini. NanoClaw does not rely on a second nested sandbox inside the Codex process; the security boundary is the container launch policy, mount scoping, and runtime-home setup controlled by the host.
 
 Core files:
 - `src/container-runner.ts` — container spawning, mounts, env injection
@@ -274,7 +274,7 @@ Flow at this layer:
 
 1. The container agent-runner reads `ContainerInput`.
 2. The runtime registry selects the in-container runtime implementation.
-3. The container-side provider registry enables only the provider MCP servers, docs, and init hooks whose token files are actually mounted into that container.
+3. The container-side provider registry enables only the provider MCP servers, allowed tools, and init hooks whose token files are actually mounted into that container.
 4. The runtime module talks to its SDK, streams output, and writes structured results back over stdout/IPC.
 
 Core files:
@@ -300,7 +300,8 @@ Provider integrations follow the same pattern:
 - `~/.nanoclaw/providers/*.json` — active host-side provider configs (copied from defaults on first startup)
 - providers are definitions only — `/add-email-account` handles authentication and activation
 - provider tokens stay on the host and are mounted into containers only when allowed by the launcher
-- the in-container provider registry turns mounted credentials into MCP servers, init hooks, allowed tools, and appended agent docs
+- the in-container provider registry turns mounted credentials into MCP servers, init hooks, and allowed tool surfaces
+- provider-specific usage guidance lives in provider-aware skills rather than being injected into every runtime prompt
 
 At startup or launch time, the system assembles the provider-specific instruction file a runtime expects:
 
@@ -385,7 +386,7 @@ Yes. Run `/add-custom-models` to enable, then `/add-model-endpoint` to connect p
 
 **Is this secure?**
 
-Agents run in containers, not behind application-level permission checks. They can only access explicitly mounted directories. Credentials are injected via proxy (Claude) or mounted auth files (Codex) — raw API keys never enter the container.
+Agents run in containers, not behind application-level permission checks. They can only access explicitly mounted directories. Claude uses a host-side proxy, Codex uses runtime-home files or env fallback depending on backend, and Gemini uses env keys. The security boundary is still mount scoping plus container isolation, not one universal auth mechanism.
 
 **Can I use a different development tool?**
 
@@ -393,7 +394,7 @@ Yes. The project has persona files for all three: `CLAUDE.md` (Claude Code), `AG
 
 **How do I add a new external service (email provider, API, etc.)?**
 
-Add a provider JSON file under `container/providers/`. On startup, NanoClaw copies shipped provider configs into `~/.nanoclaw/providers/` if they are missing. Each provider file declares token paths, MCP server config, allowed tools, init hooks, and agent docs — but the provider is inactive until you authenticate via `/add-email-account` or `npm run provider-login`. See `container/providers/ms365.json` as an example.
+Add a provider JSON file under `container/providers/`. On startup, NanoClaw copies shipped provider configs into `~/.nanoclaw/providers/` if they are missing. Each provider file declares token paths, MCP server config, allowed tools, init hooks, and auth metadata — but the provider is inactive until you authenticate via `/add-email-account` or `npm run provider-login`. See `container/providers/ms365.json` as an example.
 
 **How do I debug issues?**
 

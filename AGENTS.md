@@ -12,7 +12,7 @@ Four-layer system:
 
 All SDKs run inside the same container image. The agent-runner detects the runtime from `ContainerInput.runtime` and uses the appropriate SDK. SDKs self-register via a registry pattern (same as channels).
 
-External services (MS365, Google Workspace, IMAP) are configured as provider JSON files — no code changes needed to add or remove a provider. Provider tokens are only mounted for authorized groups.
+External services (MS365, Google Workspace, IMAP) are configured as provider JSON files — no code changes needed to add or remove a provider. Provider tokens are only mounted for authorized groups, and provider-specific usage guidance lives in provider-aware skills rather than being injected into every prompt.
 
 ## Key Files
 
@@ -46,7 +46,8 @@ External services (MS365, Google Workspace, IMAP) are configured as provider JSO
 | `container/agent-runner/src/runtimes/gemini.ts` | Gemini ADK runtime |
 | `container/agent-runner/src/providers/gws-init.ts` | GWS credential init hook |
 | `container/agent-runner/adk/nanoclaw_agent/` | ADK agent definition (Python) |
-| `container/agent-runner/src/specialist-runner.ts` | Specialist subagent dispatch |
+| `container/agent-runner/src/runtimes/codex-app-server.ts` | Codex app-server JSON-RPC helpers |
+| `container/agent-runner/src/specialist-runner.ts` | Specialist persona loading utilities |
 | `container/agent-runner/src/ipc-mcp-stdio.ts` | MCP server for NanoClaw IPC tools |
 | `container/skills/` | Skills loaded inside agent containers |
 | `groups/{name}/AGENT.md` | Per-group agent persona (runtime-agnostic) |
@@ -74,7 +75,7 @@ Telegram commands:
 
 ## Credentials
 
-**Codex (OpenAI):** Subscription auth via `codex auth login`. Credentials in `~/.codex/auth.json` synced to containers. Falls back to `OPENAI_API_KEY` in `.env`.
+**Codex (OpenAI):** Subscription auth via `codex auth login` or API-key/env compatibility backends. Runtime setup materializes only the auth needed for the selected backend and falls back to `OPENAI_API_KEY` in `.env` for compatible endpoints.
 
 **Claude:** OAuth token via `claude setup-token` stored in `.env` as `CLAUDE_CODE_OAUTH_TOKEN`. Credential proxy on port 3001 injects into containers.
 
@@ -87,25 +88,33 @@ External services are configured as JSON files in `container/providers/`. On sta
 - MCP server config (or null for CLI-based providers like `gws`)
 - Allowed tools (e.g., `mcp__ms365__*`)
 - Init hooks (e.g., GWS credential setup)
-- Agent docs (injected into AGENT.md at runtime)
 - Auth flow (login command for `npm run provider-login`)
 
 Shipped provider configs: `ms365` (Outlook/Calendar/Tasks), `gws` (Gmail/Drive/Calendar/Sheets/Docs), `imap` (placeholder). These are definitions only — run `/add-email-account` to authenticate and activate a provider for your account.
 
-Provider tokens are only mounted for authorized groups (main group by default). The container-side provider registry only enables MCP servers whose token files are actually present.
+Provider tokens are only mounted for authorized groups (main group by default). The container-side provider registry only enables MCP servers and init hooks whose token files are actually present.
 
 ## Agent Persona (AGENT.md)
 
 `AGENT.md` is the canonical persona file. It's runtime-agnostic.
 
 Inside the container, the agent-runner assembles the final instructions:
-- **Codex:** concatenates `global/AGENT.md` + `group/AGENT.md` → writes `AGENTS.md`
+- **Codex:** concatenates `global/AGENT.md` + `group/AGENT.md`, appends Codex-specific tool guidance, and passes the result to `codex app-server` as `baseInstructions`
 - **Claude:** copies `AGENT.md` → `CLAUDE.md` for SDK discovery, injects global via system prompt
-- **Gemini (ADK):** reads `AGENT.md` directly, parses specialist sub-agents from `## Specialists` section
+- **Gemini (ADK):** reads `AGENT.md` directly and parses specialist sub-agents from `## Specialists`
 
 ## Skills
 
 Container skills in `container/skills/` are synced to `.claude/skills/`, `.codex/skills/`, and `.gemini/` per group. Same SKILL.md format works with all SDKs.
+
+## Delegation Model
+
+Delegation stays runtime-specific by design:
+- **Claude:** native team-style orchestration
+- **Codex:** app-server worker threads and native delegation tools
+- **Gemini:** native ADK sub-agents
+
+The framework does not pretend these are one universal shared-session abstraction. It exposes delegation honestly as a runtime capability and keeps provider-specific orchestration inside the runtime/container layer.
 
 ## Development
 

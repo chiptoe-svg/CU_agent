@@ -148,8 +148,8 @@ const codexSetup: RuntimeSetup = {
       materializeAuthMaterial(homeDir, material);
     }
 
-    // TODO: Enforce sandboxProfile-aware launch policy in container-runner once
-    // the runtime-specific security profiles are wired through container args.
+    // TODO: Use sandboxProfile for higher-level launch policy choices such as
+    // mount breadth or advanced operations, not for nested runtime sandboxing.
     return mount;
   },
 

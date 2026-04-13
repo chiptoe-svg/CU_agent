@@ -21,6 +21,8 @@ Agents execute in containers (lightweight Linux VMs), providing:
 
 This is the primary security boundary. Rather than relying on application-level permission checks, the attack surface is limited by what's mounted.
 
+All runtimes, including Codex, rely on the same outer container boundary. NanoClaw does not depend on a second nested sandbox inside the agent process; security comes from mount scoping, non-root execution, and host-controlled runtime setup.
+
 ### 2. Mount Security
 
 **External Allowlist** - Mount permissions stored at `~/.config/nanoclaw/mount-allowlist.json`, which is:
@@ -64,18 +66,21 @@ Messages and task operations are verified against group identity:
 | View all tasks | ✓ | Own only |
 | Manage other groups | ✓ | ✗ |
 
-### 5. Credential Isolation (OneCLI Agent Vault)
+### 5. Credential Isolation
 
-Real API credentials **never enter containers**. NanoClaw uses [OneCLI's Agent Vault](https://github.com/onecli/onecli) to proxy outbound requests and inject credentials at the gateway level.
+Credential handling is runtime-specific, but the host still controls what crosses the container boundary.
 
-**How it works:**
-1. Credentials are registered once with `onecli secrets create`, stored and managed by OneCLI
-2. When NanoClaw spawns a container, it calls `applyContainerConfig()` to route outbound HTTPS through the OneCLI gateway
-3. The gateway matches requests by host and path, injects the real credential, and forwards
-4. Agents cannot discover real credentials — not in environment, stdin, files, or `/proc`
+**Current model:**
+1. Claude containers talk to a host-side credential proxy and only see placeholder auth values
+2. Codex prefers mounted auth material in the per-group `.codex/` runtime home, with API-key env fallback for compatible endpoints
+3. Gemini receives `GEMINI_API_KEY` / `GOOGLE_API_KEY` via environment variables
+4. Provider integrations (MS365, GWS, IMAP-style backends) are described by JSON config, but their token directories are only mounted for authorized containers
 
-**Per-agent policies:**
-Each NanoClaw group gets its own OneCLI agent identity. This allows different credential policies per group (e.g. your sales agent vs. support agent). OneCLI supports rate limits, and time-bound access and approval flows are on the roadmap.
+**What this means:**
+- There is no single gateway product at the center of the architecture
+- Some runtimes still receive credentials in env or runtime-home files for compatibility
+- The main protection is still explicit mount scoping plus container isolation
+- The auth backend layer is structured so secret-manager or gateway/proxy backends can be added later without reshaping the rest of the system
 
 **NOT Mounted:**
 - Channel auth sessions (`store/auth/`) — host only
@@ -110,7 +115,7 @@ Each NanoClaw group gets its own OneCLI agent identity. This allows different cr
 │  • IPC authorization                                              │
 │  • Mount validation (external allowlist)                          │
 │  • Container lifecycle                                            │
-│  • OneCLI Agent Vault (injects credentials, enforces policies)   │
+│  • Runtime auth setup and credential scoping                      │
 └────────────────────────────────┬─────────────────────────────────┘
                                  │
                                  ▼ Explicit mounts only, no secrets
@@ -119,7 +124,7 @@ Each NanoClaw group gets its own OneCLI agent identity. This allows different cr
 │  • Agent execution                                                │
 │  • Bash commands (sandboxed)                                      │
 │  • File operations (limited to mounts)                            │
-│  • API calls routed through OneCLI Agent Vault                   │
-│  • No real credentials in environment or filesystem              │
+│  • Runtime-specific auth material (proxy, env, or mounted files) │
+│  • No access beyond explicit mounts and injected runtime config  │
 └──────────────────────────────────────────────────────────────────┘
 ```
