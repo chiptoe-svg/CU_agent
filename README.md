@@ -20,7 +20,7 @@
 
 [NanoClaw](https://github.com/qwibitai/nanoclaw) is a brilliant piece of software — a personal AI assistant that's small enough to understand, secure by design, and built to be customized. But it's built entirely on the Claude Agent SDK, which means you need an Anthropic subscription, you can't use local models for privacy-sensitive work, and you're locked to one provider.
 
-FlexAgents keeps NanoClaw's philosophy — one process, a handful of files, skills over features — but abstracts the agent runtime into a modular layer. You choose which SDK to install during setup, the same way you choose which messaging channels to add. The app shell stays runtime-neutral while SDK-specific behavior lives in the runtime adapters and in-container runners.
+FlexAgents keeps NanoClaw's philosophy — one process, a handful of files, skills over features — but abstracts the agent SDK into a modular layer. You choose which SDK to install during setup, the same way you choose which messaging channels to add. The base system has no SDK-specific code at all.
 
 Three agent SDKs are supported:
 
@@ -163,16 +163,16 @@ Run `/setup` inside the CLI. It handles everything: dependencies, container runt
 
 - **Multi-runtime agents** — Choose Claude, Codex, or Gemini as your agent SDK. Install via `/add-agentSDK-codex`, `/add-agentSDK-claude`, or `/add-agentSDK-gemini`. Run one or all three.
 - **Per-group model selection** — `/model` switches models instantly. Each group can use a different SDK and model.
-- **Custom model endpoints** — Use local models (OMLX, Ollama) or any third-party provider (Together AI, Groq, HuggingFace, self-hosted vLLM). Set up with `/add-custom-models` and `/add-model-endpoint`. Uses the Codex runtime as the bridge to any OpenAI-compatible endpoint.
+- **Custom model endpoints** — Use local models (OMLX, Ollama) or any third-party provider (Together AI, Groq, HuggingFace, self-hosted vLLM). Set up with `/add-custom-models` and `/add-model-endpoint`. Uses Codex SDK as the bridge to any OpenAI-compatible endpoint.
 - **Multi-channel messaging** — WhatsApp, Telegram, Discord, Slack, Gmail. Add with skills like `/add-telegram`.
 - **Isolated group context** — Each group has its own `AGENT.md` persona, memory, filesystem, and container sandbox.
 - **Scheduled tasks** — Recurring jobs with optional pre-check scripts to minimize API usage.
 - **Web access** — Search and fetch content from the web.
 - **Container isolation** — Agents sandboxed in Docker or Apple Container. Only mounted directories accessible.
-- **Credential security** — Claude uses a credential proxy, Codex prefers mounted auth material with API-key fallback, Gemini uses API key injection, and provider token mounts stay scoped to authorized containers.
-- **Agent teams** — Claude SDK supports multi-agent orchestration via TeamCreate/TeamDelete. Gemini ADK supports native sub-agents (SequentialAgent, ParallelAgent, LoopAgent). Codex supports focused worker-thread delegation via app-server-backed specialist runs.
+- **Credential security** — Claude uses a credential proxy (containers see placeholders). Codex mounts subscription auth. Gemini uses API key injection. Secrets never exposed to agents.
+- **Agent teams** — Claude SDK supports multi-agent orchestration via TeamCreate/TeamDelete. Gemini ADK supports native sub-agents (SequentialAgent, ParallelAgent, LoopAgent). All runtimes support specialist delegation via MCP tool.
 - **Skills system** — Add capabilities with `/add-*` skills. All SDKs load skills on-demand from their respective directories.
-- **Provider plugins** — External services (MS365, Google Workspace, IMAP) described as JSON config files — add or remove a provider without code changes. Token mounts, MCP servers, allowed tools, init hooks, and optional provider guidance are all declared in the config. Providers are definitions only — run `/add-email-account` to authenticate and activate.
+- **Provider plugins** — External services (MS365, Google Workspace, IMAP) described as JSON config files — add or remove a provider without code changes. Token mounts, MCP servers, allowed tools, and agent docs are all declared in the config. Providers are definitions only — run `/add-email-account` to authenticate and activate.
 - **Email management** — Register email accounts (`/add-email-account`), calibrate sender rules (`/add-email-archive`), and batch-classify emails toward inbox zero (`/email-archive`). Provider-agnostic — works with any configured email account.
 
 ## Usage
@@ -277,13 +277,6 @@ Flow at this layer:
 3. The container-side provider registry enables only the provider MCP servers, docs, and init hooks whose token files are actually mounted into that container.
 4. The runtime module talks to its SDK, streams output, and writes structured results back over stdout/IPC.
 
-Delegation stays runtime-owned at this layer:
-
-- Claude can use native team orchestration
-- Gemini can use native ADK sub-agents
-- Codex now runs specialists as focused app-server worker threads
-- the framework does not pretend these are one universal shared-session abstraction
-
 Core files:
 - `container/agent-runner/src/index.ts` — shared container entrypoint
 - `container/agent-runner/src/runtime-registry.ts` — in-container dispatch
@@ -307,7 +300,7 @@ Provider integrations follow the same pattern:
 - `~/.nanoclaw/providers/*.json` — active host-side provider configs (copied from defaults on first startup)
 - providers are definitions only — `/add-email-account` handles authentication and activation
 - provider tokens stay on the host and are mounted into containers only when allowed by the launcher
-- the in-container provider registry turns mounted credentials into MCP servers, init hooks, and allowed tool exposure
+- the in-container provider registry turns mounted credentials into MCP servers, init hooks, allowed tools, and appended agent docs
 
 At startup or launch time, the system assembles the provider-specific instruction file a runtime expects:
 
@@ -337,7 +330,7 @@ Channel / Scheduler
 
 **Runtime-agnostic at the core.** The app shell stays provider-neutral, while SDK-specific behavior lives in runtime and container modules.
 
-**Provider-driven integrations.** External services are described as provider configs, but the host process still controls when credentials are mounted, which containers can see them, and whether they become active MCP surfaces.
+**Provider-driven integrations.** External services are described as provider configs, but the host process still controls when credentials are mounted and which containers can see them.
 
 **Built for the individual.** Fork it, customize it, make it yours. The codebase is small enough to modify safely.
 
@@ -388,11 +381,11 @@ Skills we'd like to see:
 
 **Can I use local or third-party models?**
 
-Yes. Run `/add-custom-models` to enable, then `/add-model-endpoint` to connect providers — OMLX (Apple Silicon optimized), Ollama, Together AI, Groq, HuggingFace, or any OpenAI-compatible URL. Uses the Codex runtime as the bridge for OpenAI-compatible endpoints. Switch between cloud and custom models with `/model` in Telegram. Works alongside any primary SDK — your main groups stay on Claude or Gemini while specific groups use local models.
+Yes. Run `/add-custom-models` to enable, then `/add-model-endpoint` to connect providers — OMLX (Apple Silicon optimized), Ollama, Together AI, Groq, HuggingFace, or any OpenAI-compatible URL. Uses Codex SDK as the bridge (installed automatically if needed). Switch between cloud and custom models with `/model` in Telegram. Works alongside any primary SDK — your main groups stay on Claude or Gemini while specific groups use local models.
 
 **Is this secure?**
 
-Agents run in containers, not behind application-level permission checks. They can only access explicitly mounted directories. Claude uses a host credential proxy, Codex prefers mounted auth material with API-key fallback, Gemini uses API-key env injection, and provider token directories are mounted only for authorized containers.
+Agents run in containers, not behind application-level permission checks. They can only access explicitly mounted directories. Credentials are injected via proxy (Claude) or mounted auth files (Codex) — raw API keys never enter the container.
 
 **Can I use a different development tool?**
 
