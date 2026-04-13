@@ -30,7 +30,102 @@ Three agent SDKs are supported:
 
 You can run one SDK or all three simultaneously — different groups can use different SDKs and models. Your main chat might use Codex with GPT-5.4, a code review group uses Claude Opus, and a research group uses Gemini Flash on the free tier. Each agent gets its own container with its own SDK, persona, memory, and skills. Switch models instantly with `/model` in Telegram.
 
-For the detailed feature comparison, see [docs/sdk-comparison.html](docs/sdk-comparison.html).
+### SDK Comparison
+
+<table>
+<tr>
+  <th>Feature</th>
+  <th>Claude</th>
+  <th>Codex</th>
+  <th>Gemini</th>
+</tr>
+<tr>
+  <td><b>Runtime</b></td>
+  <td><code>@anthropic-ai/claude-agent-sdk</code></td>
+  <td><code>codex app-server</code> — JSON-RPC over stdio</td>
+  <td>Google ADK — Python agent framework</td>
+</tr>
+<tr>
+  <td><b>Agent loop</b></td>
+  <td><code>query()</code> — async iterable</td>
+  <td><code>initialize</code> → <code>thread/start</code> → <code>turn/start</code> → stream notifications</td>
+  <td><code>GeminiChat</code> + <code>Scheduler</code> — event-driven</td>
+</tr>
+<tr>
+  <td><b>Built-in tools</b></td>
+  <td>18 tools: Bash, Read, Write, Edit, Glob, Grep, WebSearch, WebFetch, Task, Teams</td>
+  <td>Shell, apply_patch, web search + 5 MCP file tools (read, write, edit, glob, grep)</td>
+  <td>15+ tools: shell, read_file, write_file, replace, glob, grep_search, web_search, web_fetch</td>
+</tr>
+<tr>
+  <td><b>MCP support</b></td>
+  <td>Via <code>query()</code> options</td>
+  <td>Via <code>config.toml</code> — app-server reads on startup</td>
+  <td>Via <code>.gemini/settings.json</code> + extensions</td>
+</tr>
+<tr>
+  <td><b>Skills</b></td>
+  <td><code>.claude/skills/</code> on-demand via Skill tool</td>
+  <td><code>.codex/skills/</code> native discovery via <code>skills/list</code></td>
+  <td>Agent skills via <code>activate_skill</code></td>
+</tr>
+<tr>
+  <td><b>Session persist</b></td>
+  <td>JSONL with resume by UUID</td>
+  <td>Thread persistence + <code>thread/resume</code> by ID, <code>thread/read</code> for inspection</td>
+  <td>Chat recording with checkpoint resume</td>
+</tr>
+<tr>
+  <td><b>Compaction</b></td>
+  <td>Native auto-compact with pre-compact hook</td>
+  <td>Native <code>thread/compact/start</code> triggered at 40K tokens</td>
+  <td>Chat compression with checkpoints</td>
+</tr>
+<tr>
+  <td><b>Thread lifecycle</b></td>
+  <td>Resume by session ID</td>
+  <td><code>thread/start</code>, <code>thread/resume</code>, <code>thread/fork</code>, <code>thread/rollback</code>, <code>thread/read</code></td>
+  <td>Session checkpoints</td>
+</tr>
+<tr>
+  <td><b>Multi-agent</b></td>
+  <td>Agent teams — TeamCreate / SendMessage. Shared context.</td>
+  <td>Host-level via IPC + scheduled tasks</td>
+  <td>Subagent tools + A2A protocol + remote invocation</td>
+</tr>
+<tr>
+  <td><b>Tool approval</b></td>
+  <td><code>permissionMode: bypassPermissions</code></td>
+  <td><code>approvalPolicy: never</code> + auto-approve notifications</td>
+  <td>PolicyEngine with TOML rules</td>
+</tr>
+<tr>
+  <td><b>Auth</b></td>
+  <td>OAuth token or API key</td>
+  <td>ChatGPT subscription or API key</td>
+  <td>API key (free tier: 60 req/min)</td>
+</tr>
+<tr>
+  <td><b>Local models</b></td>
+  <td>Not possible</td>
+  <td>OMLX, Ollama, LiteLLM via <code>baseUrl</code></td>
+  <td>Not confirmed</td>
+</tr>
+<tr>
+  <td><b>Open source</b></td>
+  <td>No</td>
+  <td>Yes (Rust)</td>
+  <td>Yes (TypeScript / Python)</td>
+</tr>
+<tr>
+  <td><b>Models</b></td>
+  <td>Opus 4.6, Sonnet 4.6/4.5, Haiku 4.5</td>
+  <td>GPT-5.4, 5.4-mini, 5.3-codex, 5.2</td>
+  <td>Gemini 2.5 Pro, Flash, Flash Lite</td>
+</tr>
+</table>
+
+For the full comparison with status badges, see [docs/sdk-comparison.html](https://htmlpreview.github.io/?https://github.com/chiptoe-svg/CUagent/blob/main/docs/sdk-comparison.html).
 
 <!-- END DRAFT -->
 
@@ -166,9 +261,10 @@ Codex has one extra wrinkle: it may use an inner sandbox based on user namespace
 Core files:
 - `src/container-runner.ts` — container spawning, mounts, env injection
 - `src/runtime-setup.ts` — runtime home preparation
+- `src/provider-registry.ts` — provider plugin loader (token mounts, MCP servers, tools)
 - `src/auth/types.ts` — neutral auth backend contracts
 - `src/auth/backends.ts` — compatibility env/file backends plus future stubs
-- `src/provider-registry.ts` — host-side provider config loading and token mount discovery
+- `container/providers/` — provider JSON configs (ms365, gws, imap)
 
 ### Layer 4: In-Container Agent Runner
 

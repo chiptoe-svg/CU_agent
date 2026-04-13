@@ -1,98 +1,21 @@
-Claude Agent SDK vs Codex Agent SDK
-Feature comparison for the CU Agent multi-runtime architecture
-Feature
-Claude
-Codex
-Status
-Streaming events
-Full — messages, tool calls, results streamed in real-time via async iterable
-Full — runStreamed() with item.started/completed events
-Same
-IPC follow-up messages
-Messages injected into active query in real-time (mid-turn)
-Messages processed as next turn after current turn completes. Context preserved across turns via thread.
-Functional
-slight delay
-Session resume
-Resume by session ID + UUID with precise re-entry point
-Fresh thread each container start. Context via conversations/ archive and memory/ directory.
-Different approach
-reliable, no errors
-Conversation archiving
-Pre-compact hook archives full multi-turn JSONL transcript. Uses session summary for filename.
-Per-turn archive from stream events — captures prompt, tool calls, command output, and response.
-Functional
-per-turn, not multi-turn
-Session summary filenames
-Reads sessions-index.json for intelligent filename
-Uses first 50 chars of prompt
-Functional
-less descriptive
-Global instructions
-Loaded from AGENT.md, injected via systemPrompt.append
-Assembled into AGENTS.md from global + group sources
-Same
-diff mechanism
-Persona file sync
-Copies AGENT.md → CLAUDE.md for SDK discovery
-Assembles AGENTS.md from sources + Codex tool guidance appended
-Same
-diff mechanism
-MCP server config
-Passed via query() options (code)
-Written to config.toml (file)
-Same
-diff mechanism
-Additional directories
-additionalDirectories from /workspace/extra/
-additionalDirectories passed to thread options
-Same
-Skill loading
-On-demand from .claude/skills/ via description matching + Skill tool
-On-demand from .codex/skills/ via description matching
-Same
-diff mechanism
-Tool quality
-18 built-in tools: fuzzy edit, numbered read, ripgrep search
-Shell + apply_patch. Guided via AGENTS.md instructions (cat -n, grep -rn, find).
-Functional
-less polished, same capabilities
-Usage tracking
-Not logged
-Input/output tokens logged per turn
-Codex better
-Error handling
-Separate message types (system/init, result/error)
-Catch block + stale session detection via regex
-Same
-Local models
-Not possible (Anthropic API only)
-baseUrl routes to OMLX, Ollama, LiteLLM, or any OpenAI-compatible endpoint. Per-group via /model.
-Codex only
-Multi-agent orchestration
-Agent teams — orchestrator spawns subagents via TeamCreate/TeamDelete/SendMessage. Shared context.
-Not in SDK. Achievable at host level: main group delegates to specialist groups via IPC + scheduled tasks. No shared context.
-Claude better
-native vs host-managed
-Agent swarms
-Telegram swarm skill — each subagent gets own bot identity in group chat. Native SDK support.
-Not available. Would require host-level orchestration + multiple bot tokens.
-Claude only
-Credential management
-Credential proxy (port 3001). OAuth + API key. Containers see placeholders only.
-~/.codex/auth.json mount. Subscription or API key from .env.
-Same
-diff mechanism
-Auth switching
-/auth: toggle API key / OAuth. Persists via .env commenting.
-/auth: shows subscription and API key status.
-Same
-Model selection
-/model with 4 Claude models. Cloud only.
-/model with 4 OpenAI models + local (OMLX) + custom (LiteLLM).
-Codex better
-more options
-Same Feature parity
-Functional Works with minor differences
-Codex better/only Codex advantage
-Claude better/only Claude advantage
+Agent SDK Comparison — Claude vs Codex vs Gemini
+NanoClaw FlexAgents multi-runtime architecture
+
+Feature               Claude                                              Codex                                                   Gemini
+Runtime               @anthropic-ai/claude-agent-sdk                      codex app-server — JSON-RPC over stdio                  Google ADK (Python)
+Agent loop            query() — async iterable of messages                initialize → thread/start → turn/start → notifications  GeminiChat + Scheduler — event-driven
+CLI install           @anthropic-ai/claude-code                           @openai/codex                                           @google/gemini-cli
+Built-in tools        18: Bash, Read, Write, Edit, Glob, Grep, etc.       Shell, apply_patch, web search + 5 MCP file tools       15+: shell, read/write/replace, glob, grep, web
+MCP support           Via query() options (in code)                        Via config.toml — app-server reads on startup            Via .gemini/settings.json + extensions
+Skills                .claude/skills/ on-demand via Skill tool             .codex/skills/ native discovery via skills/list          activate_skill + extensions
+Session persist       JSONL with resume by UUID                           thread/resume by ID + thread/read for inspection         Chat recording with checkpoint resume
+Streaming             Async iterable of typed messages                    JSON-RPC notifications: agentMessage/delta, etc.         StreamEvent (CHUNK, RETRY, STOPPED, BLOCKED)
+Compaction            Native auto-compact with pre-compact hook           Native thread/compact/start at 40K tokens                Chat compression with checkpoints
+Thread lifecycle      Resume by session ID                                start, resume, fork, rollback, read                     Session checkpoints
+Tool approval         permissionMode: bypassPermissions                   approvalPolicy: never + auto-approve notifications       PolicyEngine with TOML rules
+Multi-agent           Agent teams — TeamCreate/SendMessage                Host-level via IPC + scheduled tasks                     Subagent tools + A2A protocol
+Auth                  OAuth token or API key                              ChatGPT subscription or API key                         API key (free tier: 60 req/min)
+Local models          Not possible (Anthropic API only)                   OMLX, Ollama, LiteLLM via baseUrl                       Not confirmed
+Open source           No                                                  Yes (Rust)                                              Yes (TypeScript / Python)
+Models                Opus 4.6, Sonnet 4.6/4.5, Haiku 4.5                GPT-5.4, 5.4-mini, 5.3-codex, 5.2                      Gemini 2.5 Pro, Flash, Flash Lite
+Token tracking        Via SDK usage metadata                              Native thread/tokenUsage/updated with totals            Via API response metadata

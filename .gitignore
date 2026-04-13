@@ -16,7 +16,9 @@ groups/*
 groups/global/*
 groups/telegram_main/*
 !groups/global/AGENT.md
+!groups/global/AGENT-reference.md
 !groups/telegram_main/AGENT.md
+!groups/telegram_main/AGENT-reference.md
 
 # Secrets
 *.keys.json

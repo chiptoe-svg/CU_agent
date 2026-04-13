@@ -74,13 +74,13 @@
   .badge-codex { background: var(--green-bg); color: var(--green); }
   .badge-claude { background: var(--blue-bg); color: var(--blue); }
   .badge-gemini { background: var(--purple-bg); color: var(--purple); }
-  .legend { margin-top: 16px; display: flex; gap: 16px; font-size: 12px; color: var(--text-muted); flex-wrap: wrap; }
   code { font-size: 12px; background: var(--bg-row); padding: 1px 4px; border-radius: 3px; border: 1px solid var(--border); }
   small { color: var(--text-muted); }
+  .legend { margin-top: 16px; display: flex; gap: 16px; font-size: 12px; color: var(--text-muted); flex-wrap: wrap; }
 </style>
 </head>
 <body>
-<h1>Agent SDK Comparison — Claude vs Codex vs Gemini</h1>
+<h1>Agent SDK Comparison &mdash; Claude vs Codex vs Gemini</h1>
 <p class="subtitle">NanoClaw FlexAgents multi-runtime architecture</p>
 
 <table>
@@ -95,18 +95,18 @@
 </thead>
 <tbody>
 <tr>
-  <td class="feature">SDK package</td>
+  <td class="feature">Runtime</td>
   <td><code>@anthropic-ai/claude-agent-sdk</code></td>
-  <td><code>@openai/codex-sdk</code></td>
-  <td><code>@google/gemini-cli-core</code></td>
-  <td><span class="badge badge-same">All have SDKs</span></td>
+  <td><code>codex app-server</code> &mdash; JSON-RPC over stdio</td>
+  <td>Google ADK (<code>google-adk</code>) &mdash; Python agent framework</td>
+  <td><span class="badge badge-same">All integrated</span></td>
 </tr>
 <tr>
   <td class="feature">Agent loop</td>
   <td><code>query()</code> &mdash; async iterable of messages</td>
-  <td><code>thread.runStreamed()</code> &mdash; ThreadEvent generator</td>
+  <td>JSON-RPC: <code>initialize</code> &rarr; <code>thread/start</code> &rarr; <code>turn/start</code> &rarr; stream notifications</td>
   <td><code>GeminiChat</code> + <code>Scheduler</code> &mdash; event-driven with AgentLoopContext</td>
-  <td><span class="badge badge-same">Same</span><br><small>diff mechanism</small></td>
+  <td><span class="badge badge-same">Same</span><br><small>diff protocol</small></td>
 </tr>
 <tr>
   <td class="feature">CLI install</td>
@@ -118,9 +118,9 @@
 <tr>
   <td class="feature">Built-in tools</td>
   <td>18 tools: Bash, Read, Write, Edit, Glob, Grep, WebSearch, WebFetch, Task, Teams, etc.</td>
-  <td>Shell, apply_patch, web search</td>
+  <td>Shell, apply_patch, web search + 5 MCP file tools (read, write, edit, glob, grep)</td>
   <td>15+ tools: shell, read_file, write_file, replace, glob, grep_search, google_web_search, web_fetch, save_memory, etc.</td>
-  <td><span class="badge badge-claude">Claude most</span><br><small>Gemini close</small></td>
+  <td><span class="badge badge-claude">Claude most</span><br><small>Codex + Gemini close</small></td>
 </tr>
 <tr>
   <td class="feature">Persona file</td>
@@ -138,36 +138,43 @@
 </tr>
 <tr>
   <td class="feature">MCP support</td>
-  <td>Via <code>query()</code> options</td>
-  <td>Via <code>config.toml</code></td>
+  <td>Via <code>query()</code> options (in code)</td>
+  <td>Via <code>config.toml</code> &mdash; app-server reads on startup</td>
   <td>Via <code>.gemini/settings.json</code> + extensions</td>
   <td><span class="badge badge-same">Same</span><br><small>diff mechanism</small></td>
 </tr>
 <tr>
   <td class="feature">Skills</td>
   <td><code>.claude/skills/</code> on-demand via Skill tool</td>
-  <td><code>.codex/skills/</code> on-demand via description matching</td>
+  <td><code>.codex/skills/</code> native discovery via <code>skills/list</code></td>
   <td>Agent skills via <code>activate_skill</code> + extensions system</td>
   <td><span class="badge badge-same">Same</span><br><small>diff mechanism</small></td>
 </tr>
 <tr>
   <td class="feature">Session persist</td>
   <td>JSONL with resume by UUID</td>
-  <td>Thread persistence in ~/.codex/sessions</td>
+  <td>Thread persistence + <code>thread/resume</code> by ID. <code>thread/read</code> for inspection.</td>
   <td>Chat recording with compression and checkpoint resume</td>
   <td><span class="badge badge-same">Same</span></td>
 </tr>
 <tr>
   <td class="feature">Streaming</td>
   <td>Async iterable of typed messages</td>
-  <td><code>runStreamed()</code> with item events</td>
+  <td>JSON-RPC notifications: <code>item/agentMessage/delta</code>, <code>item/started</code>, <code>turn/completed</code></td>
   <td>StreamEvent (CHUNK, RETRY, STOPPED, BLOCKED)</td>
   <td><span class="badge badge-same">Same</span></td>
 </tr>
 <tr>
-  <td class="feature">Tool confirmation / sandboxing</td>
+  <td class="feature">Context compaction</td>
+  <td>Native auto-compact with pre-compact hook</td>
+  <td>Native <code>thread/compact/start</code> triggered at 40K input tokens</td>
+  <td>Chat compression with checkpoint resume</td>
+  <td><span class="badge badge-same">Same</span><br><small>all native</small></td>
+</tr>
+<tr>
+  <td class="feature">Tool approval</td>
   <td><code>permissionMode: bypassPermissions</code></td>
-  <td><code>approvalPolicy: never</code><br><code>sandboxMode: workspace-write</code></td>
+  <td><code>approvalPolicy: never</code> + auto-approve all <code>requestApproval</code> notifications</td>
   <td>MessageBus confirmations + SandboxManager + PolicyEngine (TOML rules)</td>
   <td><span class="badge badge-gemini">Gemini most granular</span></td>
 </tr>
@@ -179,11 +186,11 @@
   <td><span class="badge badge-gemini">Gemini + Claude</span><br><small>Codex lacks</small></td>
 </tr>
 <tr>
-  <td class="feature">Hook system</td>
-  <td>~5 hooks (PreCompact, etc.)</td>
-  <td>Limited</td>
-  <td>11 lifecycle hooks</td>
-  <td><span class="badge badge-gemini">Gemini most</span></td>
+  <td class="feature">Thread lifecycle</td>
+  <td>Resume by session ID</td>
+  <td><code>thread/start</code>, <code>thread/resume</code>, <code>thread/fork</code>, <code>thread/rollback</code>, <code>thread/read</code></td>
+  <td>Session checkpoints</td>
+  <td><span class="badge badge-codex">Codex richest</span></td>
 </tr>
 <tr>
   <td class="feature">Auth</td>
@@ -203,7 +210,7 @@
   <td class="feature">Open source</td>
   <td>No</td>
   <td>Yes (Rust)</td>
-  <td>Yes (TypeScript)</td>
+  <td>Yes (TypeScript / Python)</td>
   <td><span class="badge badge-codex">Codex + Gemini</span></td>
 </tr>
 <tr>
@@ -214,11 +221,18 @@
   <td><span class="badge badge-same">All have range</span></td>
 </tr>
 <tr>
+  <td class="feature">Token tracking</td>
+  <td>Via SDK usage metadata</td>
+  <td>Native <code>thread/tokenUsage/updated</code> with cumulative totals + context window size</td>
+  <td>Via API response metadata</td>
+  <td><span class="badge badge-codex">Codex most detailed</span></td>
+</tr>
+<tr>
   <td class="feature">Integration status</td>
   <td><code>/add-agentSDK-claude</code><br>Done &mdash; skill branch ready</td>
-  <td><code>/add-agentSDK-codex</code><br>Done &mdash; skill branch ready</td>
-  <td><code>/add-agentSDK-gemini</code><br>Ready to build &mdash; same pattern</td>
-  <td><span class="badge badge-functional">Gemini next</span></td>
+  <td><code>/add-agentSDK-codex</code><br>Done &mdash; app-server protocol</td>
+  <td><code>/add-agentSDK-gemini</code><br>Done &mdash; Google ADK</td>
+  <td><span class="badge badge-same">All integrated</span></td>
 </tr>
 </tbody>
 </table>
