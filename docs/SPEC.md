@@ -41,7 +41,7 @@ Multi-runtime personal assistant based on upstream NanoClaw. The host app manage
 ├──────────────────────────────────────────────────────────────────────┤
 │ Shared agent-runner                                                   │
 │   ├─ Claude runtime  -> Claude Agent SDK                              │
-│   ├─ Codex runtime   -> OpenAI Codex SDK                              │
+│   ├─ Codex runtime   -> Codex CLI app-server (JSON-RPC over stdio)    │
 │   └─ Gemini runtime  -> Google ADK (Python sidecar)                    │
 │                                                                      │
 │ Mounted group workspace + per-group runtime home + IPC + extras      │
@@ -147,11 +147,13 @@ The shared runner:
 
 #### Codex runtime
 
-- Uses `@openai/codex-sdk`
-- Synthesizes `AGENTS.md` from global and group agent files
-- Writes NanoClaw MCP config into `.codex/config.toml`
+- Uses `codex app-server` over JSON-RPC stdio
+- Synthesizes `AGENTS.md` from global and group agent files, then appends Codex-specific tool guidance
+- Rebuilds a minimal `.codex/config.toml` for MCP server registration on each launch
 - Archives conversations with tool-call context
 - Supports custom `baseUrl` for OpenAI-compatible endpoints
+- Can use an additional inner bubblewrap/user-namespace sandbox inside the container
+- Specialist delegation runs as a focused worker thread with its own instructions, not as a framework-level shared team session
 
 #### Gemini runtime
 

@@ -12,6 +12,12 @@ Four-layer system:
 
 All SDKs run inside the same container image. The agent-runner detects the runtime from `ContainerInput.runtime` and uses the appropriate SDK. SDKs self-register via a registry pattern (same as channels).
 
+Delegation is runtime-specific by design:
+- Claude uses native team tools
+- Gemini uses ADK-native sub-agents
+- Codex uses focused worker-thread delegation via app-server
+- the framework only exposes this honestly as a runtime capability, not a universal shared-session swarm model
+
 External services (MS365, Google Workspace, IMAP) are configured as provider JSON files — no code changes needed to add or remove a provider. Provider tokens are only mounted for authorized groups.
 
 ## Key Files
@@ -74,7 +80,7 @@ Telegram commands:
 
 ## Credentials
 
-**Codex (OpenAI):** Subscription auth via `codex auth login`. Credentials in `~/.codex/auth.json` synced to containers. Falls back to `OPENAI_API_KEY` in `.env`.
+**Codex (OpenAI):** Subscription auth via `codex auth login`. Per-group `.codex` auth material is prepared from host auth state. Falls back to `OPENAI_API_KEY` in `.env`.
 
 **Claude:** OAuth token via `claude setup-token` stored in `.env` as `CLAUDE_CODE_OAUTH_TOKEN`. Credential proxy on port 3001 injects into containers.
 
@@ -87,7 +93,7 @@ External services are configured as JSON files in `container/providers/`. On sta
 - MCP server config (or null for CLI-based providers like `gws`)
 - Allowed tools (e.g., `mcp__ms365__*`)
 - Init hooks (e.g., GWS credential setup)
-- Agent docs (injected into AGENT.md at runtime)
+- Optional provider-specific docs or skill guidance
 - Auth flow (login command for `npm run provider-login`)
 
 Shipped provider configs: `ms365` (Outlook/Calendar/Tasks), `gws` (Gmail/Drive/Calendar/Sheets/Docs), `imap` (placeholder). These are definitions only — run `/add-email-account` to authenticate and activate a provider for your account.
@@ -99,7 +105,7 @@ Provider tokens are only mounted for authorized groups (main group by default). 
 `AGENT.md` is the canonical persona file. It's runtime-agnostic.
 
 Inside the container, the agent-runner assembles the final instructions:
-- **Codex:** concatenates `global/AGENT.md` + `group/AGENT.md` → writes `AGENTS.md`
+- **Codex:** concatenates `global/AGENT.md` + `group/AGENT.md`, then appends Codex-specific tool guidance → writes `AGENTS.md`
 - **Claude:** copies `AGENT.md` → `CLAUDE.md` for SDK discovery, injects global via system prompt
 - **Gemini (ADK):** reads `AGENT.md` directly, parses specialist sub-agents from `## Specialists` section
 

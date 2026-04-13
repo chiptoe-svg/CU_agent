@@ -5,7 +5,7 @@
  * Called by the run_specialist MCP tool. Works with all runtimes:
  *
  * - Claude: spawns a fresh query() with the specialist persona as system prompt
- * - Codex: creates a new thread with the specialist persona in AGENTS.md
+ * - Codex: opens a dedicated app-server worker thread with the specialist persona
  * - Gemini: runs gemini CLI with the specialist persona prepended to the prompt
  *
  * Specialist personas are defined in AGENT.md (as guidance for the main agent)
@@ -15,11 +15,34 @@
 import fs from 'fs';
 import path from 'path';
 import { spawn } from 'child_process';
+import { fileURLToPath } from 'url';
 
 import { log } from './shared.js';
+import {
+  CODEX_TOOL_GUIDANCE,
+  attachCodexAutoApproval,
+  buildCodexMcpConfig,
+  createCodexConfigOverrides,
+  initializeCodexAppServer,
+  killCodexAppServer,
+  spawnCodexAppServer,
+  startCodexTurn,
+  startOrResumeCodexThread,
+  writeCodexMcpConfigToml,
+} from './runtimes/codex-app-server.js';
 
 const SPECIALISTS_DIR = '/workspace/group/specialists';
 const AGENT_MD_PATH = '/workspace/group/AGENT.md';
+const DEFAULT_CODEX_MODEL = 'gpt-5.4-mini';
+const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
+const SPECIALIST_TIMEOUT_MS = 90_000;
+
+export interface SpecialistResult {
+  summary: string;
+  resultText: string;
+  toolCalls: string[];
+  threadId?: string;
+}
 
 /**
  * Load specialist persona by name.
@@ -27,17 +50,14 @@ const AGENT_MD_PATH = '/workspace/group/AGENT.md';
  * the ## Specialists section of AGENT.md for an inline definition.
  */
 export function loadSpecialistPersona(name: string): string | null {
-  // Sanitize name to prevent path traversal
   const safeName = name.replace(/[^a-zA-Z0-9_-]/g, '');
   if (!safeName) return null;
 
-  // Check dedicated persona file first
   const personaFile = path.join(SPECIALISTS_DIR, `${safeName}.md`);
   if (fs.existsSync(personaFile)) {
     return fs.readFileSync(personaFile, 'utf-8');
   }
 
-  // Fall back to inline definition in AGENT.md
   if (fs.existsSync(AGENT_MD_PATH)) {
     const agentMd = fs.readFileSync(AGENT_MD_PATH, 'utf-8');
     const persona = extractInlineSpecialist(agentMd, safeName);
@@ -47,10 +67,6 @@ export function loadSpecialistPersona(name: string): string | null {
   return null;
 }
 
-/**
- * Extract a specialist definition from AGENT.md.
- * Looks for ### <Name> under ## Specialists and captures until the next heading.
- */
 function extractInlineSpecialist(markdown: string, name: string): string | null {
   const pattern = new RegExp(
     `###\\s+${name}\\s*\\n([\\s\\S]*?)(?=\\n###\\s|\\n##\\s|$)`,
@@ -60,13 +76,9 @@ function extractInlineSpecialist(markdown: string, name: string): string | null 
   return match ? match[1].trim() : null;
 }
 
-/**
- * List available specialists (from both files and AGENT.md).
- */
 export function listSpecialists(): string[] {
   const names = new Set<string>();
 
-  // From specialist files
   if (fs.existsSync(SPECIALISTS_DIR)) {
     for (const file of fs.readdirSync(SPECIALISTS_DIR)) {
       if (file.endsWith('.md')) {
@@ -75,7 +87,6 @@ export function listSpecialists(): string[] {
     }
   }
 
-  // From AGENT.md inline definitions
   if (fs.existsSync(AGENT_MD_PATH)) {
     const content = fs.readFileSync(AGENT_MD_PATH, 'utf-8');
     const specialistsSection = content.match(
@@ -83,8 +94,8 @@ export function listSpecialists(): string[] {
     );
     if (specialistsSection) {
       const headings = specialistsSection[1].matchAll(/###\s+(\w+)/g);
-      for (const m of headings) {
-        names.add(m[1].toLowerCase());
+      for (const match of headings) {
+        names.add(match[1].toLowerCase());
       }
     }
   }
@@ -92,71 +103,148 @@ export function listSpecialists(): string[] {
   return [...names].sort();
 }
 
-// --- Runtime-specific subquery implementations ---
+function summarizeResult(resultText: string): string {
+  const compact = resultText.replace(/\s+/g, ' ').trim();
+  return compact.slice(0, 280) || '(no response from specialist)';
+}
 
-/**
- * Run a specialist subtask via the Codex SDK.
- * Creates a fresh thread with the specialist persona.
- */
 async function runCodexSpecialist(
   persona: string,
   task: string,
   model: string,
-): Promise<string> {
-  // Dynamic import to avoid requiring the SDK when using other runtimes
-  const { Codex } = await import('@openai/codex-sdk');
+): Promise<SpecialistResult> {
+  const __dirname = path.dirname(fileURLToPath(import.meta.url));
+  const mcpServerPath = path.join(__dirname, 'ipc-mcp-stdio.js');
+  const modelRef = model || DEFAULT_CODEX_MODEL;
+  const workerInstructions = [
+    'You are a focused specialist worker thread. Complete the assigned task and return a concise answer for the parent agent. You do not have access to the parent conversation beyond the explicit task text you were given.',
+    persona,
+    CODEX_TOOL_GUIDANCE,
+  ].join('\n\n---\n\n');
 
-  const codex = new Codex({
-    apiKey: process.env.OPENAI_API_KEY,
-    baseUrl: process.env.OPENAI_BASE_URL,
-  });
+  const containerInput = {
+    prompt: task,
+    groupFolder: process.env.NANOCLAW_GROUP_FOLDER || '',
+    chatJid: process.env.NANOCLAW_CHAT_JID || '',
+    isMain: process.env.NANOCLAW_IS_MAIN === '1',
+    runtime: 'codex',
+  };
 
-  // Write a temporary AGENTS.md with the specialist persona
-  const agentsMdPath = '/workspace/group/AGENTS.md';
-  const originalAgentsMd = fs.existsSync(agentsMdPath)
-    ? fs.readFileSync(agentsMdPath, 'utf-8')
-    : null;
+  const mcpServers = buildCodexMcpConfig(mcpServerPath, containerInput, modelRef);
+  writeCodexMcpConfigToml(mcpServers);
 
-  fs.writeFileSync(agentsMdPath, persona);
+  const server = spawnCodexAppServer(
+    createCodexConfigOverrides(process.env.OPENAI_BASE_URL),
+  );
+  attachCodexAutoApproval(server);
+
+  const turnState = {
+    resultText: '',
+    toolCalls: [] as string[],
+    threadId: undefined as string | undefined,
+  };
 
   try {
-    const thread = codex.startThread({
-      model,
-      workingDirectory: '/workspace/group',
-      sandboxMode: 'workspace-write' as const,
-      approvalPolicy: 'never' as const,
-      skipGitRepoCheck: true,
+    await initializeCodexAppServer(server);
+    turnState.threadId = await startOrResumeCodexThread(server, undefined, {
+      model: modelRef,
+      cwd: '/workspace/group',
+      sandbox: 'danger-full-access',
+      approvalPolicy: 'never',
+      personality: 'friendly',
+      baseInstructions: workerInstructions,
     });
 
-    const turn = await thread.runStreamed(task);
-    let result: string | null = null;
+    const turnPromise = new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('Codex specialist timed out after 90s'));
+      }, SPECIALIST_TIMEOUT_MS);
 
-    for await (const event of turn.events) {
-      if (event.type === 'item.completed' && event.item.type === 'agent_message') {
-        result = event.item.text;
-      }
-    }
+      server.notificationHandlers.push((notification) => {
+        switch (notification.method) {
+          case 'item/agentMessage/delta': {
+            const delta = notification.params.delta as string | undefined;
+            if (delta) turnState.resultText += delta;
+            break;
+          }
 
-    return result || '(no response from specialist)';
+          case 'item/started': {
+            const item = notification.params.item as
+              | {
+                  type?: string;
+                  command?: string;
+                  server?: string;
+                  tool?: string;
+                  query?: string;
+                }
+              | undefined;
+            if (!item) break;
+            if (item.type === 'commandExecution' && item.command) {
+              turnState.toolCalls.push(`$ ${item.command}`);
+            } else if (item.type === 'mcpToolCall' && item.server && item.tool) {
+              turnState.toolCalls.push(`MCP: ${item.server}/${item.tool}`);
+            } else if (item.type === 'webSearch' && item.query) {
+              turnState.toolCalls.push(`Search: ${item.query}`);
+            }
+            break;
+          }
+
+          case 'item/completed': {
+            const item = notification.params.item as
+              | { type?: string; text?: string; aggregated_output?: string }
+              | undefined;
+            if (item?.type === 'agentMessage' && item.text) {
+              turnState.resultText = item.text;
+            } else if (
+              item?.type === 'commandExecution' &&
+              item.aggregated_output
+            ) {
+              turnState.toolCalls.push(item.aggregated_output.slice(0, 300));
+            }
+            break;
+          }
+
+          case 'thread/started': {
+            const thread = notification.params.thread as
+              | { id?: string }
+              | undefined;
+            if (thread?.id) turnState.threadId = thread.id;
+            break;
+          }
+
+          case 'turn/completed':
+            clearTimeout(timeout);
+            resolve();
+            break;
+        }
+      });
+    });
+
+    await startCodexTurn(server, {
+      threadId: turnState.threadId,
+      inputText: task,
+      model: modelRef,
+      cwd: '/workspace/group',
+    });
+    await turnPromise;
+
+    const resultText = turnState.resultText.trim() || '(no response from specialist)';
+    return {
+      summary: summarizeResult(resultText),
+      resultText,
+      toolCalls: turnState.toolCalls,
+      threadId: turnState.threadId,
+    };
   } finally {
-    // Restore original AGENTS.md
-    if (originalAgentsMd !== null) {
-      fs.writeFileSync(agentsMdPath, originalAgentsMd);
-    } else {
-      try { fs.unlinkSync(agentsMdPath); } catch { /* ignore */ }
-    }
+    killCodexAppServer(server);
   }
 }
 
-/**
- * Run a specialist subtask via the Gemini CLI.
- * Prepends the specialist persona to the prompt.
- */
 async function runGeminiSpecialist(
   persona: string,
   task: string,
   model: string,
-): Promise<string> {
+): Promise<SpecialistResult> {
   const fullPrompt = `${persona}\n\n---\n\nTask: ${task}`;
 
   return new Promise((resolve, reject) => {
@@ -170,13 +258,17 @@ async function runGeminiSpecialist(
     let stdout = '';
     let stderr = '';
 
-    proc.stdout.on('data', (chunk: Buffer) => { stdout += chunk.toString(); });
-    proc.stderr.on('data', (chunk: Buffer) => { stderr += chunk.toString(); });
+    proc.stdout.on('data', (chunk: Buffer) => {
+      stdout += chunk.toString();
+    });
+    proc.stderr.on('data', (chunk: Buffer) => {
+      stderr += chunk.toString();
+    });
 
     const timeout = setTimeout(() => {
       proc.kill('SIGTERM');
       reject(new Error('Specialist timed out after 90s'));
-    }, 90_000);
+    }, SPECIALIST_TIMEOUT_MS);
 
     proc.on('close', (code) => {
       clearTimeout(timeout);
@@ -184,7 +276,12 @@ async function runGeminiSpecialist(
         reject(new Error(`Gemini specialist exited ${code}: ${stderr.slice(-200)}`));
         return;
       }
-      resolve(stdout.trim() || '(no response from specialist)');
+      const resultText = stdout.trim() || '(no response from specialist)';
+      resolve({
+        summary: summarizeResult(resultText),
+        resultText,
+        toolCalls: [],
+      });
     });
 
     proc.on('error', (err) => {
@@ -194,70 +291,95 @@ async function runGeminiSpecialist(
   });
 }
 
-// --- Public API ---
-
-/**
- * Run a specialist subtask using the current container runtime.
- * The runtime is detected from the environment (set by the main agent runner).
- */
 export async function runSpecialist(
   specialistName: string,
   task: string,
   runtime: string,
   model: string,
-): Promise<string> {
+): Promise<SpecialistResult> {
   const persona = loadSpecialistPersona(specialistName);
   if (!persona) {
     const available = listSpecialists();
-    return `Unknown specialist "${specialistName}". Available: ${available.join(', ') || 'none defined. Add specialist definitions to AGENT.md or create files in specialists/'}`;
+    const resultText = `Unknown specialist "${specialistName}". Available: ${available.join(', ') || 'none defined. Add specialist definitions to AGENT.md or create files in specialists/'}`;
+    return {
+      summary: summarizeResult(resultText),
+      resultText,
+      toolCalls: [],
+    };
   }
 
-  log(`[specialist] Running ${specialistName} via ${runtime} (model: ${model})`);
+  const resolvedModel =
+    model ||
+    (runtime === 'codex'
+      ? DEFAULT_CODEX_MODEL
+      : runtime === 'gemini'
+        ? DEFAULT_GEMINI_MODEL
+        : '');
+
+  log(
+    `[specialist] Running ${specialistName} via ${runtime} (model: ${
+      resolvedModel || 'default'
+    })`,
+  );
 
   try {
     if (runtime === 'codex') {
-      return await runCodexSpecialist(persona, task, model);
-    } else if (runtime === 'gemini') {
-      return await runGeminiSpecialist(persona, task, model);
-    } else {
-      // Claude uses native agent teams (TeamCreate/SendMessage).
-      // This fallback handles the case where Claude calls the MCP tool
-      // instead of using its native orchestration.
-      // We run it as a simple Gemini-style prompt prepend via the Claude CLI.
-      return await runClaudeSpecialistFallback(persona, task);
+      return await runCodexSpecialist(persona, task, resolvedModel);
     }
+
+    if (runtime === 'gemini') {
+      return await runGeminiSpecialist(persona, task, resolvedModel);
+    }
+
+    const resultText = await runClaudeSpecialistFallback(persona, task);
+    return {
+      summary: summarizeResult(resultText),
+      resultText,
+      toolCalls: [],
+    };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     log(`[specialist] ${specialistName} failed: ${msg}`);
-    return `Specialist "${specialistName}" failed: ${msg}`;
+    const resultText = `Specialist "${specialistName}" failed: ${msg}`;
+    return {
+      summary: summarizeResult(resultText),
+      resultText,
+      toolCalls: [],
+    };
   }
 }
 
-/**
- * Claude fallback: if the agent calls the MCP tool instead of using
- * TeamCreate, run a quick subquery with the specialist persona.
- */
 async function runClaudeSpecialistFallback(
   persona: string,
   task: string,
 ): Promise<string> {
-  // Use the Claude CLI in non-interactive mode
   const fullPrompt = `${persona}\n\n---\n\nTask: ${task}`;
 
   return new Promise((resolve, reject) => {
-    const proc = spawn('claude', ['-p', fullPrompt, '--allowedTools', 'Bash,Read,Write,Edit,Glob,Grep,WebSearch,WebFetch'], {
-      cwd: '/workspace/group',
-      env: process.env,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
+    const proc = spawn(
+      'claude',
+      [
+        '-p',
+        fullPrompt,
+        '--allowedTools',
+        'Bash,Read,Write,Edit,Glob,Grep,WebSearch,WebFetch',
+      ],
+      {
+        cwd: '/workspace/group',
+        env: process.env,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
+    );
 
     let stdout = '';
-    proc.stdout.on('data', (chunk: Buffer) => { stdout += chunk.toString(); });
+    proc.stdout.on('data', (chunk: Buffer) => {
+      stdout += chunk.toString();
+    });
 
     const timeout = setTimeout(() => {
       proc.kill('SIGTERM');
       reject(new Error('Specialist timed out after 90s'));
-    }, 90_000);
+    }, SPECIALIST_TIMEOUT_MS);
 
     proc.on('close', (code) => {
       clearTimeout(timeout);

@@ -154,6 +154,8 @@ const codexSetup: RuntimeSetup = {
   },
 
   getCredentialEnv(ctx) {
+    // Keep auth/env resolution aligned with the runtime boundary so
+    // per-run overrides like baseUrl continue to work end-to-end.
     return prepareProviderAuthSync(ctx).env || {};
   },
 };

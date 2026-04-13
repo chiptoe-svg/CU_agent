@@ -527,7 +527,7 @@ Note: If you have TeamCreate/SendMessage available (Claude runtime), prefer thos
   async (args) => {
     const result = await runSpecialist(args.specialist, args.task, currentRuntime, currentModel);
     return {
-      content: [{ type: 'text' as const, text: result }],
+      content: [{ type: 'text' as const, text: result.resultText }],
     };
   },
 );
