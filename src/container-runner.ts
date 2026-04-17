@@ -26,8 +26,9 @@ import {
   readonlyMountArgs,
   stopContainer,
 } from './container-runtime.js';
+import { readEnvFile } from './env.js';
 import { validateAdditionalMounts } from './mount-security.js';
-import { getProviderMounts } from './provider-registry.js';
+import { getProviderMounts, loadProviders } from './provider-registry.js';
 import { getRuntimeSetup } from './runtime-setup.js';
 import { RegisteredGroup } from './types.js';
 
@@ -262,6 +263,26 @@ function buildContainerArgs(
   });
   for (const [key, value] of Object.entries(credEnv)) {
     args.push('-e', `${key}=${value}`);
+  }
+
+  // Provider-declared env forwarding — read host .env for the keys each
+  // provider lists in containerEnv, and inject them into the container.
+  // MCP subprocesses and the agent-runner's ${env.VAR} resolver pick them
+  // up from process.env. Only forwarded to groups that get provider mounts
+  // (currently: isMain) to match the gating in buildVolumeMounts.
+  if (group.isMain === true) {
+    const wantedKeys = new Set<string>();
+    for (const provider of loadProviders()) {
+      if (provider.containerEnv) {
+        for (const key of provider.containerEnv) wantedKeys.add(key);
+      }
+    }
+    if (wantedKeys.size > 0) {
+      const values = readEnvFile([...wantedKeys]);
+      for (const [key, value] of Object.entries(values)) {
+        args.push('-e', `${key}=${value}`);
+      }
+    }
   }
 
   // Runtime-specific args for host gateway resolution

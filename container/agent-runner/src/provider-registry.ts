@@ -90,20 +90,39 @@ export function loadProviders(): ProviderConfig[] {
 
 /**
  * Check if a provider's tokens are available in the container.
- * Returns true if the token directory exists and contains the required file.
+ * requiredFile may be an exact filename or a shell-style glob (containing
+ * `*` or `?`). Globs are matched against entries in the token dir.
  */
 function isProviderAvailable(provider: ProviderConfig): boolean {
   const tokenDir = provider.tokenPaths.container;
-  const requiredFile = path.join(tokenDir, provider.tokenPaths.requiredFile);
-  return fs.existsSync(requiredFile);
+  const pattern = provider.tokenPaths.requiredFile;
+
+  if (!pattern.includes('*') && !pattern.includes('?')) {
+    return fs.existsSync(path.join(tokenDir, pattern));
+  }
+
+  if (!fs.existsSync(tokenDir)) return false;
+  const regex = new RegExp(
+    '^' +
+      pattern
+        .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+        .replace(/\*/g, '.*')
+        .replace(/\?/g, '.') +
+      '$',
+  );
+  return fs.readdirSync(tokenDir).some((entry) => regex.test(entry));
 }
 
 /**
  * Resolve template variables in MCP env values.
- * Supports: ${tokenDir} → provider's container token directory
+ * Supports:
+ *   ${tokenDir}  → provider's container token directory
+ *   ${env.VAR}   → process.env.VAR (forwarded from host via containerEnv)
  */
 function resolveEnvValue(value: string, provider: ProviderConfig): string {
-  return value.replace(/\$\{tokenDir\}/g, provider.tokenPaths.container);
+  return value
+    .replace(/\$\{tokenDir\}/g, provider.tokenPaths.container)
+    .replace(/\$\{env\.([A-Z_][A-Z0-9_]*)\}/g, (_, name) => process.env[name] ?? '');
 }
 
 /**

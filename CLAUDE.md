@@ -36,7 +36,8 @@ External services (MS365, Google Workspace, IMAP) are configured as provider JSO
 | `src/config.ts` | Config: runtime, model, trigger, paths, intervals |
 | `src/credential-proxy.ts` | Anthropic credential proxy (Claude runtime) |
 | `src/task-scheduler.ts` | Runs scheduled tasks via AgentRuntime |
-| `container/providers/` | Provider JSON configs (ms365, gws, imap) |
+| `container/providers/` | Provider JSON configs (ms365, gws, gws-mcp, imap) |
+| `scripts/gws-mcp-login.sh` | workspace-mcp OAuth login wrapper (invoked via provider-login) |
 | `container/agent-runner/src/index.ts` | In-container shared agent loop |
 | `container/agent-runner/src/runtime-registry.ts` | Container-side SDK dispatch |
 | `container/agent-runner/src/provider-registry.ts` | Container-side provider discovery (MCP, tools, init hooks, docs) |
@@ -83,14 +84,15 @@ Telegram commands:
 ## Providers
 
 External services are configured as JSON files in `container/providers/`. On startup, defaults are copied to `~/.nanoclaw/providers/`. Each provider declares:
-- Token paths (host and container mount points)
+- Token paths (host and container mount points). `requiredFile` may be an exact name or a glob (`*.json`).
 - MCP server config (or null for CLI-based providers like `gws`)
 - Allowed tools (e.g., `mcp__ms365__*`)
 - Init hooks (e.g., GWS credential setup)
+- `containerEnv` — host env var names to forward from `.env` into the container (for BYO OAuth client credentials, API keys, etc.). In `mcp.env`, reference them with `${env.VAR_NAME}`.
 - Agent docs (injected into AGENT.md at runtime)
 - Auth flow (login command for `npm run provider-login`)
 
-Shipped provider configs: `ms365` (Outlook/Calendar/Tasks), `gws` (Gmail/Drive/Calendar/Sheets/Docs), `imap` (placeholder). These are definitions only — run `/add-email-account` to authenticate and activate a provider for your account.
+Shipped provider configs: `ms365` (Outlook/Calendar/Tasks), `gws` (Gmail/Drive/Calendar/Sheets/Docs via CLI), `gws_mcp` (same services via `workspace-mcp`, BYO OAuth), `imap` (placeholder). These are definitions only — run `/add-email-account` or `npm run provider-login <id>` to authenticate and activate a provider.
 
 Provider tokens are only mounted for authorized groups (main group by default). The container-side provider registry only enables MCP servers whose token files are actually present.
 

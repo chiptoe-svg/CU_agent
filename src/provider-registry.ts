@@ -32,6 +32,8 @@ export interface ProviderConfig {
   allowedTools: string[];
   init: string | null;
   agentDocs: string;
+  /** Host env var names to forward into the container (read from .env). */
+  containerEnv?: string[];
   auth: {
     loginCommand: string;
     postLogin?: string;

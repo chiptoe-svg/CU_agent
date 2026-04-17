@@ -33,6 +33,9 @@ ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
 # Install Python for Google ADK (Gemini runtime)
 RUN apt-get update && apt-get install -y python3 python3-pip python3-venv && rm -rf /var/lib/apt/lists/*
 
+# Install uv (provides uvx — used to launch workspace-mcp for Google Workspace)
+RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh
+
 # Install shared tools globally. SDK CLIs are added by /add-agentSDK-* skills.
 RUN npm install -g agent-browser @anthropic-ai/claude-code @openai/codex
 

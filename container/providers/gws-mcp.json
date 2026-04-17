@@ -1,0 +1,47 @@
+{
+  "id": "gws_mcp",
+  "name": "Google Workspace (MCP)",
+  "description": "Gmail, Calendar, Drive, Docs, Sheets, Slides via workspace-mcp — BYO OAuth client",
+
+  "tokenPaths": {
+    "host": "~/.nanoclaw/.gws-mcp-tokens",
+    "container": "/workspace/.gws-mcp-tokens",
+    "readonly": false,
+    "requiredFile": "*.json"
+  },
+
+  "containerEnv": ["GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET"],
+
+  "mcp": {
+    "command": "uvx",
+    "args": [
+      "workspace-mcp",
+      "--single-user",
+      "--tool-tier",
+      "extended",
+      "--tools",
+      "gmail",
+      "calendar",
+      "drive",
+      "docs",
+      "sheets",
+      "slides"
+    ],
+    "env": {
+      "WORKSPACE_MCP_CREDENTIALS_DIR": "${tokenDir}",
+      "GOOGLE_OAUTH_CLIENT_ID": "${env.GOOGLE_OAUTH_CLIENT_ID}",
+      "GOOGLE_OAUTH_CLIENT_SECRET": "${env.GOOGLE_OAUTH_CLIENT_SECRET}"
+    }
+  },
+
+  "allowedTools": ["mcp__gws_mcp__*"],
+
+  "init": null,
+
+  "agentDocs": "## Google Workspace (MCP)\n\nYou have MCP tools prefixed with `mcp__gws_mcp__` for the user's Google Workspace account. Use these for email, calendar, drive, docs, sheets, and slides.\n\nAvailable capabilities:\n- *Gmail*: search, read, send, draft, label, move, delete messages.\n- *Calendar*: list calendars, list/create/update/delete events, respond to invites.\n- *Drive*: list, search, upload, download, move, share files.\n- *Docs*: read and modify Google Docs.\n- *Sheets*: read and modify spreadsheets.\n- *Slides*: read and modify presentations.\n\nTool names follow the underlying service verbs (e.g., `search_gmail_messages`, `list_calendars`, `create_doc`).",
+
+  "auth": {
+    "loginCommand": "bash $(npm prefix)/scripts/gws-mcp-login.sh",
+    "description": "Starts workspace-mcp, opens browser for Google OAuth consent, writes token file"
+  }
+}
