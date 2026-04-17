@@ -39,3 +39,9 @@ groups/telegram_main/*
 
 agents-sdk-docs
 data/models/
+
+# Xcode user data
+ios/**/*.xcuserstate
+ios/**/*.xcuserdatad/
+ios/**/xcuserdata/
+ios/**/DerivedData/
