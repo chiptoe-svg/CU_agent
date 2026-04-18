@@ -287,7 +287,7 @@ Core files:
 - `src/provider-registry.ts` — provider plugin loader (token mounts, MCP servers, tools)
 - `src/auth/types.ts` — neutral auth backend contracts
 - `src/auth/backends.ts` — compatibility env/file backends plus future stubs
-- `container/providers/` — provider JSON configs (ms365, gws, imap)
+- `container/providers/` — provider JSON configs (ms365, gws, gws-mcp, imap)
 
 ### Layer 4: In-Container Agent Runner
 
@@ -319,7 +319,7 @@ Each group is isolated by folder, persona, memory, IPC namespace, and runtime ho
 
 Provider integrations follow the same pattern:
 
-- `container/providers/*.json` — shipped provider definitions (ms365, gws, imap)
+- `container/providers/*.json` — shipped provider definitions (ms365, gws, gws-mcp, imap)
 - `~/.nanoclaw/providers/*.json` — active host-side provider configs (copied from defaults on first startup)
 - providers are definitions only — `/add-email-account` handles authentication and activation
 - provider tokens stay on the host and are mounted into containers only when allowed by the launcher
