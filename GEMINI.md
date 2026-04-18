@@ -2,6 +2,19 @@
 
 Multi-runtime personal assistant built on NanoClaw. Supports Claude, Codex (OpenAI), and Gemini agent SDKs.
 
+## Scope and Non-goals
+
+FlexAgents is based on nanoclaw v1 with multi-runtime support added in trunk. Upstream `qwibitai/nanoclaw` has since released a v2 architecture; this fork evaluated adopting it and chose not to (2026-04-18).
+
+**Non-goals:**
+- **Rebasing onto nanoclaw v2.** Session DBs, module registries, Chat SDK bridge, richer user/role schemas. Multi-runtime in trunk is this fork's primary feature and isn't improved by adopting v2. The divergence is deliberate, not a pending rebase.
+- **Skill-marketplace compatibility (`/add-*` feature skills).** Divergence makes `git merge upstream/skill/*` conflict-prone; marketplace skills are reference material, not installable here. Most are channel integrations we don't need anyway.
+- **Upstream's richer entity model** (users / user_roles / pending_approvals / agent_destinations). Single-user / small-team deployments don't need it.
+
+Upstream contributions flow the other direction: provider-level work goes back as standalone PRs (e.g., the Codex app-server provider). Architecture changes stay in this fork.
+
+For active institutional deployment (FERPA-aware, MS365-integrated, department operations), see [chiptoe-svg/CUagent](https://github.com/chiptoe-svg/CUagent) — a specialized downstream fork.
+
 ## Architecture
 
 Four-layer system:
