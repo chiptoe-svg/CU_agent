@@ -668,6 +668,22 @@ async function main(): Promise<void> {
     const channel = findChannel(channels, chatJid);
     if (!channel) return;
 
+    // Remote Control grants interactive Claude Code access (file, shell, etc.)
+    // Only real interactive channels should be able to start it. The HTTP API
+    // channel delivers inbound messages as sender='http-user'; reject those
+    // so a leaked HTTP_API_KEY can't be escalated into a remote shell URL.
+    if (command === '/remote-control' && msg.sender === 'http-user') {
+      logger.warn(
+        { chatJid, sender: msg.sender },
+        'Remote control rejected: synthetic sender (HTTP channel)',
+      );
+      await channel.sendMessage(
+        chatJid,
+        'Remote Control is not available over the HTTP API.',
+      );
+      return;
+    }
+
     if (command === '/remote-control') {
       const result = await startRemoteControl(
         msg.sender,
