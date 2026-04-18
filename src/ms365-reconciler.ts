@@ -82,11 +82,16 @@ function getClientAndTenant(): { clientId: string; tenantId: string } | null {
   try {
     const raw = fs.readFileSync(PROVIDER_CONFIG_PATH, 'utf-8');
     const config = JSON.parse(raw) as {
-      mcp?: { env?: { MS365_MCP_CLIENT_ID?: string; MS365_MCP_TENANT_ID?: string } };
+      mcp?: {
+        env?: { MS365_MCP_CLIENT_ID?: string; MS365_MCP_TENANT_ID?: string };
+      };
     };
     const env = config?.mcp?.env;
     if (env?.MS365_MCP_CLIENT_ID && env?.MS365_MCP_TENANT_ID) {
-      return { clientId: env.MS365_MCP_CLIENT_ID, tenantId: env.MS365_MCP_TENANT_ID };
+      return {
+        clientId: env.MS365_MCP_CLIENT_ID,
+        tenantId: env.MS365_MCP_TENANT_ID,
+      };
     }
   } catch {
     /* missing or unparseable — caller treats as "not configured" */
@@ -137,7 +142,10 @@ async function getAccessToken(): Promise<string | null> {
       },
     );
     if (!resp.ok) {
-      logger.debug({ status: resp.status }, 'ms365 reconciler: token refresh failed');
+      logger.debug(
+        { status: resp.status },
+        'ms365 reconciler: token refresh failed',
+      );
       return null;
     }
     const data = (await resp.json()) as { access_token?: string };
@@ -149,12 +157,16 @@ async function getAccessToken(): Promise<string | null> {
 }
 
 async function fetchRecentlyCompleted(token: string): Promise<TodoTask[]> {
-  const cutoff = new Date(Date.now() - LOOKBACK_HOURS * 60 * 60 * 1000).toISOString();
+  const cutoff = new Date(
+    Date.now() - LOOKBACK_HOURS * 60 * 60 * 1000,
+  ).toISOString();
   const headers = { Authorization: `Bearer ${token}` };
 
   let lists: Array<{ id: string }> = [];
   try {
-    const r = await fetch('https://graph.microsoft.com/v1.0/me/todo/lists', { headers });
+    const r = await fetch('https://graph.microsoft.com/v1.0/me/todo/lists', {
+      headers,
+    });
     if (!r.ok) return [];
     lists = ((await r.json()) as { value: Array<{ id: string }> }).value || [];
   } catch {
@@ -188,12 +200,16 @@ function tryParseEmailMeta(body: TodoTask['body']): EmailMetadata | null {
   for (const c of candidates) {
     try {
       const parsed = JSON.parse(c) as Record<string, unknown>;
-      if (typeof parsed.email_id === 'string' && typeof parsed.account === 'string') {
+      if (
+        typeof parsed.email_id === 'string' &&
+        typeof parsed.account === 'string'
+      ) {
         return {
           email_id: parsed.email_id,
           account: parsed.account,
           from: typeof parsed.from === 'string' ? parsed.from : undefined,
-          subject: typeof parsed.subject === 'string' ? parsed.subject : undefined,
+          subject:
+            typeof parsed.subject === 'string' ? parsed.subject : undefined,
           folder: typeof parsed.folder === 'string' ? parsed.folder : undefined,
         };
       }
@@ -309,7 +325,11 @@ export function startMs365Reconciler(deps: Ms365ReconcilerDeps): void {
           });
           filed += 1;
           logger.info(
-            { ms365TaskId: t.id, emailId: meta.email_id, account: meta.account },
+            {
+              ms365TaskId: t.id,
+              emailId: meta.email_id,
+              account: meta.account,
+            },
             'enqueued email-filing task from completed MS365 to-do',
           );
         } catch (err) {
