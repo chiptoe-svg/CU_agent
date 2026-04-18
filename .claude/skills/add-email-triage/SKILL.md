@@ -1,22 +1,27 @@
 ---
 name: add-email-triage
-description: Set up email triage — hourly inbox scanning that creates Apple Reminders for actionable emails. Filing happens when reminders are completed. Requires email accounts (/add-email-account), archive config (/add-email-archive), and the Apple Reminders host service installed (see docs/apple-reminders-mcp.md).
+description: Set up email triage — hourly inbox scanning that creates MS365 To Do tasks (or Apple Reminders, or file-backed todos as a last resort) for actionable emails. Filing happens when the task is completed. Requires email accounts (/add-email-account) and archive config (/add-email-archive).
 ---
 
 # Add Email Triage
 
-Interactive setup for the email triage system. Configures hourly inbox scanning that identifies actionable emails and creates a reminder for each one. When the user checks off a reminder (on any device — iPhone, Reminders.app, etc.), the scheduler's reconciliation poll picks it up and files the associated email.
+Interactive setup for the email triage system. Configures hourly inbox scanning that identifies actionable emails and creates a to-do item for each one. When the user checks off the item (on iPhone via the Reminders app, in Microsoft To Do, in Outlook — anywhere), the scheduler's reconciliation poll picks it up and files the associated email.
 
 **Prerequisites:**
 - At least one email account registered (run `/add-email-account`)
 - Email archive configured with taxonomy and rules (run `/add-email-archive`)
-- Apple Reminders MCP installed and the host service running — see `docs/apple-reminders-mcp.md`. If the host is unreachable the legacy file-backed `todo_*` tools keep triage alive as a fallback, but existing open `todos.json` items should be migrated with `todo_migrate_to_reminders` once the host is up.
+- One of the following to-do surfaces set up (triage uses the first one that's available, in this order):
+  1. **MS365 Tasks** (preferred) — set up via `/add-email-account` if the email account is MS365. Tasks sync to iOS Reminders via the Exchange account.
+  2. **Apple Reminders** — optional, installed via `/add-apple-reminders`. Gives you Siri-creatable items visible to the agent and a different reconciler path.
+  3. **Legacy file-backed `todo_*` tools** — automatic fallback when neither of the above is reachable; kept alive with deprecation warnings.
 
-## Tool surface (post-migration)
+## Tool surface
 
-Email triage writes actionable items via `mcp__reminders__reminder_create` into a dedicated list (default: "Email Actions"). Each reminder's `notes` field stores the email metadata as JSON — message id, account, sender, subject, proposed folder — so the filing step has everything it needs without re-querying the inbox.
+Email triage prefers **MS365 To Do** for new items via `mcp__ms365__create-todo-task` into the user's default task list (typically named `Tasks`). Each task's `body` field stores the email metadata as JSON — message id, account, sender, subject, proposed folder — so the filing step has everything it needs without re-querying the inbox. When the task is tap-completed on any Microsoft surface (Outlook, MS To Do, iOS Reminders Exchange list), `src/ms365-reconciler.ts` picks it up within ~5 min and enqueues the filing action.
 
-The older `todo_create` / `todo_list` / `todo_complete` / `todo_delete` tools still work but emit deprecation warnings. New installs should use the `reminder_*` surface exclusively; pre-existing installs should run `todo_migrate_to_reminders` once after standing up the host service.
+If MS365 isn't set up on this install but Apple Reminders is, use `mcp__reminders__reminder_create` into a dedicated list (default: "Email Actions"); `src/reminders-reconciler.ts` handles completions via EventKit. Same JSON convention goes in the reminder's `notes` field.
+
+If neither is reachable, fall back to the deprecated `mcp__nanoclaw__todo_create` so triage doesn't break. Log the fallback so the user knows to re-run `todo_migrate_to_reminders` (Apple path) or re-enable MS365 once things are back.
 
 ## Phase 1: Prerequisites
 

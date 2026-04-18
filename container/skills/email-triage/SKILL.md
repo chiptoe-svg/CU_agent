@@ -1,18 +1,18 @@
 ---
 name: email-triage
-description: Scan inbox for actionable emails, create Apple Reminders for things needing response or action, and file emails when reminders are completed. Use /email-triage to scan now, /email-triage status for pending items.
+description: Scan inbox for actionable emails, create MS365 To Do tasks (or Apple Reminders as fallback) for things needing response or action, and file emails when the task is completed. Use /email-triage to scan now, /email-triage status for pending items.
 ---
 
 # /email-triage — Email Triage
 
-Scan inbox emails, identify actionable items, create Apple Reminders for them. Filing happens when the reminder is completed — either by the agent on user request ("mark it done") or by the user tap-completing on their iPhone (picked up by the scheduler's reconciliation poll).
+Scan inbox emails, identify actionable items, create MS365 To Do tasks for them (with Apple Reminders and the deprecated file-backed `todo_*` as fallbacks). Filing happens when the task is completed — either by the agent on user request ("mark it done") or by the user tap-completing on their iPhone / in Outlook / in Microsoft To Do (picked up by the host-side reconciliation polls for both surfaces).
 
 ## Modes
 
 Parse the user's command:
 - `/email-triage` or `/email-triage scan` → **Scan mode**
 - `/email-triage status` → **Status mode**
-- `/email-triage file <todo-id>` → **File mode** (complete todo + file email)
+- `/email-triage file <task-id>` → **File mode** (complete task + file email)
 
 If this is a scheduled task (message starts with `[SCHEDULED TASK`), run scan mode directly.
 
@@ -81,16 +81,19 @@ cat /workspace/group/email-accounts.yaml
       - **Uncertain** → add to uncertain list (reported in summary for user to decide)
       - **Clearly not actionable** → skip (leave in inbox)
 
-4. **Create a reminder** for actionable emails via `mcp__reminders__reminder_create`:
+4. **Create a to-do item** for actionable emails. Preferred surface: **MS365 To Do** (tasks sync to iOS Reminders via the Exchange account and the user works out of MS365). Call `mcp__ms365__create-todo-task` with:
    - `title`: concise action (e.g., "Reply to Dr. Smith re: budget meeting")
-   - `notes`: JSON with email metadata (same convention as the legacy todo path):
+   - `body`: JSON string with email metadata (same convention as the legacy todo path):
      ```json
      {"email_id": "MSG_ID", "account": "gmail", "from": "smith@clemson.edu", "subject": "Budget meeting", "folder": "Sorted/Work"}
      ```
-   - `due`: extracted from email content if present (e.g., "by Friday", "due April 18", "deadline tomorrow"), otherwise next business day (skip weekends — Friday defaults to Monday, Saturday/Sunday default to Monday)
-   - `priority`: `high` if urgent signals, `medium` otherwise
-   - `list`: `"Email Actions"` — call `mcp__reminders__reminder_list_available` once at setup time to confirm it exists; if not, use `mcp__reminders__reminder_list_create` to make it
-   - If the host service returns `host_unreachable` or `eventkit_denied`, fall back to the legacy `mcp__nanoclaw__todo_create` so triage keeps working, and surface the underlying error to the user so they can fix the Reminders host
+   - `dueDateTime`: extracted from email content if present (e.g., "by Friday", "due April 18", "deadline tomorrow"), otherwise next business day (skip weekends — Friday defaults to Monday, Saturday/Sunday default to Monday). Provide as an object with `dateTime` and `timeZone` per Graph's requirements.
+   - `importance`: `high` if urgent signals, `normal` otherwise
+   - List: the user's default To Do list (named `Tasks` on this install). Call `mcp__ms365__list-todo-lists` once at setup time to get the `listId`.
+   - On MS365 failure (token expired, Graph 5xx), fall back in order:
+     1. `mcp__reminders__reminder_create` into an "Email Actions" Apple Reminders list (call `reminder_list_available` / `reminder_list_create` if the list doesn't exist). Same metadata convention but in `notes` instead of `body`.
+     2. `mcp__nanoclaw__todo_create` (deprecated file-backed fallback) so triage doesn't lose items.
+   - Surface the underlying error to the user whenever you fall back, so they can fix the upstream cause.
 
 5. **Update state** — save `last_scan_date` per account
 
@@ -115,10 +118,17 @@ cat /workspace/group/email-accounts.yaml
 
 ## File Mode
 
-When the user says something like "mark the Smith email as done" or `/email-triage file <reminder-id>`, or when the scheduler's reconciliation poll detects that the user completed a reminder on their iPhone (via `mcp__reminders__reminder_list` with `status: "recently_completed"`):
+When the user says something like "mark the Smith email as done" or `/email-triage file <task-id>`, or when a reconciliation poll detects a completion:
 
-1. **Find the reminder** via `mcp__reminders__reminder_list` (list: "Email Actions", include_notes: true); filter to the target id if invoked manually
-2. **Parse notes** to get email_id, account, and proposed folder
+- **MS365 reconciler** (`src/ms365-reconciler.ts`) polls Graph for `status eq 'completed'` tasks and fires this mode with the task's body parsed from JSON.
+- **Apple Reminders reconciler** (`src/reminders-reconciler.ts`) polls EventKit's `recently_completed` reminders and fires this mode with the reminder's notes parsed from JSON.
+
+Steps:
+
+1. **Look up the to-do item** only if invoked manually — the reconcilers pass the parsed metadata directly. For manual invocation:
+   - MS365: `mcp__ms365__list-todo-tasks` (filter by id)
+   - Apple: `mcp__reminders__reminder_list` (list: "Email Actions", include_notes: true)
+2. **Parse the metadata** to get `email_id`, `account`, and proposed `folder`
 3. **Move the email** to the folder:
 
    **gws_mcp** (preferred — structured MCP tools):
@@ -138,23 +148,28 @@ When the user says something like "mark the Smith email as done" or `/email-tria
 
    Look up folder/label IDs from `email-archive/config.yaml` (`archive_accounts[].folder_ids`).
 
-4. **Mark the reminder complete** via `mcp__reminders__reminder_complete` (skip this if the user is the one who tap-completed it on their phone — it's already complete)
+4. **Mark the to-do item complete** — skip if the user already tap-completed on their phone (that's how the reconciler saw it). Only needed when the agent is closing the loop itself:
+   - MS365: `mcp__ms365__update-todo-task` with `status: 'completed'`
+   - Apple: `mcp__reminders__reminder_complete`
 5. **Log the filing** — append to `email-triage/state/filed.jsonl`:
    ```json
-   {"timestamp": "ISO", "email_id": "...", "account": "...", "folder": "...", "reminder_id": "..."}
+   {"timestamp": "ISO", "email_id": "...", "account": "...", "folder": "...", "task_id": "..."}
    ```
-6. **Confirm**: "Filed 'Budget meeting' → Sorted/Work. Reminder completed."
+6. **Confirm** only if the user triggered it manually: "Filed 'Budget meeting' → Sorted/Work. Task completed." Reconciler-triggered filings should run silently (no chat message).
 
 ## Status Mode
 
-1. **List pending reminders** via `mcp__reminders__reminder_list` (list: "Email Actions", status: "pending")
+1. **List pending tasks** on whichever surface was used during scan:
+   - MS365 (default): `mcp__ms365__list-todo-tasks` with `status eq 'notStarted' or status eq 'inProgress'`, scoped to the `Tasks` list
+   - Apple Reminders (fallback): `mcp__reminders__reminder_list` (list: "Email Actions", status: "pending")
+   - Legacy: `mcp__nanoclaw__todo_list`
 2. **Read state** for scan stats
 3. **Report:**
 
    ```
    📊 Email Triage Status
 
-   Pending actions (Email Actions):
+   Pending actions (MS365 Tasks):
    [ ] Reply to Dr. Smith re: budget (due Apr 14) ⚠️ overdue
    [ ] Review contract from Legal (due Apr 16)
    [ ] Submit expense report (due Apr 18)
@@ -162,7 +177,7 @@ When the user says something like "mark the Smith email as done" or `/email-tria
    Last scan: 45min ago
    Filed today: N emails
 
-   Complete an item: /email-triage file <todo-id>
+   Complete an item: /email-triage file <task-id>
    Or tell me: "mark the Smith email as done"
    ```
 
