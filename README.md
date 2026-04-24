@@ -14,7 +14,7 @@
 
 ---
 
-> **Note.** FlexAgents is a multi-runtime generalization of nanoclaw v1, intended as a starting point for people who want Codex/Gemini/Claude interchangeability. Active institutional deployment — FERPA-aware, MS365-integrated, specialized for university department operations — lives in [chiptoe-svg/CUagent](https://github.com/chiptoe-svg/CUagent). See `CLAUDE.md` for scope and non-goals.
+> **Note.** FlexAgents is a multi-runtime generalization of nanoclaw v1, intended as a starting point for people who want Codex/Gemini/Claude interchangeability. Development of FERPA-aware, MS365-integrated, specialized for university department operations — lives in [chiptoe-svg/CUagent](https://github.com/chiptoe-svg/CUagent). See `CLAUDE.md` for scope and non-goals.
 
 ---
 
